@@ -1,0 +1,160 @@
+name: build-rules
+
+# Builds the production rules generation from the 7 provider sources on a
+# schedule, publishes it as an immutable GitHub Release asset, and lets the
+# STR AdBlocker module pull it with `bin/update.sh cloud <url>`.
+#
+# The production tooling is vendored in tools/ of this repository, so the
+# workflow runs standalone. If tools/ is ever absent, it falls back to the
+# module repository (defaults: <owner>/STR-ADBlocker, branch master; set
+# MODULE_REPO / MODULE_REF repository variables to override).
+
+on:
+  workflow_dispatch:
+    inputs:
+      module_repo:
+        description: Module repository (owner/name) that owns the production tooling
+        required: false
+        default: ""
+      module_ref:
+        description: Git ref of the module repository (branch or tag)
+        required: false
+        default: ""
+      reason:
+        description: Optional build reason
+        required: false
+        default: manual
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rules-build
+  cancel-in-progress: false
+
+env:
+  MODULE_REPO_INPUT: ${{ inputs.module_repo }}
+  MODULE_REF_INPUT: ${{ inputs.module_ref }}
+  MODULE_REPO_DEFAULT: ${{ vars.MODULE_REPO }}
+  MODULE_REF_DEFAULT: ${{ vars.MODULE_REF }}
+  ENDPOINT_RAW_URL: ${{ vars.ENDPOINT_RAW_URL }}
+  KEEP_RELEASES: ${{ vars.KEEP_RELEASES }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tooling source
+        id: resolve
+        run: |
+          if [ -f tools/compile_policy.py ]; then
+            echo "tooling=repo" >> "$GITHUB_OUTPUT"
+            echo "workdir=." >> "$GITHUB_OUTPUT"
+          else
+            repo="${MODULE_REPO_INPUT:-${MODULE_REPO_DEFAULT:-${{ github.repository_owner }}/STR-ADBlocker}}"
+            ref="${MODULE_REF_INPUT:-${MODULE_REF_DEFAULT:-master}}"
+            echo "tooling=module" >> "$GITHUB_OUTPUT"
+            echo "workdir=module" >> "$GITHUB_OUTPUT"
+            echo "module_repo=$repo" >> "$GITHUB_OUTPUT"
+            echo "module_ref=$ref" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout module tooling
+        if: steps.resolve.outputs.tooling == 'module'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.resolve.outputs.module_repo }}
+          ref: ${{ steps.resolve.outputs.module_ref }}
+          path: module
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Build generation
+        id: build
+        working-directory: ${{ steps.resolve.outputs.workdir }}
+        run: |
+          python tools/build_cloud_generation.py \
+            --work "$RUNNER_TEMP/work" \
+            --out "$RUNNER_TEMP/out" \
+            --source hagezi-normal=https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/multi.txt \
+            --source antiad-easylist=https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-easylist.txt \
+            --source 1hosts-lite=https://raw.githubusercontent.com/badmojr/1Hosts/master/Lite/domains.txt \
+            --source adguard-dns=https://filters.adtidy.org/extension/chromium/filters/15.txt \
+            --source adguard-base=https://filters.adtidy.org/extension/chromium/filters/2.txt \
+            --source adguard-chinese=https://filters.adtidy.org/extension/chromium/filters/224.txt \
+            --source banad=https://raw.githubusercontent.com/damengzhu/banad/main/jiekouAD.txt \
+            --endpoint-raw-url "${ENDPOINT_RAW_URL:-https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Advertising/Advertising.list}"
+          python - "$RUNNER_TEMP/out/latest.json" <<'EOF' >> "$GITHUB_OUTPUT"
+          import json, sys
+          latest = json.load(open(sys.argv[1]))
+          for key in ("token", "provider_sha256", "rules", "hotset", "endpoints", "archive_sha256"):
+              print(f"{key}={latest[key]}")
+          EOF
+
+      - name: Test compile chain
+        working-directory: ${{ steps.resolve.outputs.workdir }}
+        run: |
+          if [ -d tests ]; then
+            python -m pytest tests -q \
+              -k "compile_policy or compile_hotset or compile_ip_feed or cloud_generation or compile_rules or compile_hosts or hotset or policy"
+          else
+            echo "no local tests; generation build already exercised the compile chain"
+          fi
+
+      - name: Compare with previous release
+        id: compare
+        run: |
+          set +e
+          curl -fsSL --connect-timeout 15 --max-time 60 \
+            "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/latest.json" \
+            -o "$RUNNER_TEMP/prev.json"
+          curl_status=$?
+          set -e
+          if [ "$curl_status" -eq 0 ]; then
+            prev_provider=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('provider_sha256',''))")
+            if [ -n "$prev_provider" ] && [ "$prev_provider" = "${{ steps.build.outputs.provider_sha256 }}" ]; then
+              echo "unchanged=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Publish release
+        if: steps.compare.outputs.unchanged != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          token="${{ steps.build.outputs.token }}"
+          notes="Ruleset $token
+          - rules=${{ steps.build.outputs.rules }}
+          - hotset=${{ steps.build.outputs.hotset }}
+          - endpoints=${{ steps.build.outputs.endpoints }}
+          - provider_sha256=${{ steps.build.outputs.provider_sha256 }}
+          - archive_sha256=${{ steps.build.outputs.archive_sha256 }}"
+          gh release create "rules-$token" \
+            "$RUNNER_TEMP/out/generation.tar.gz" \
+            "$RUNNER_TEMP/out/latest.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Ruleset $token" \
+            --notes "$notes"
+          keep="${KEEP_RELEASES:-10}"
+          case "$keep" in ''|*[!0-9]*) keep=10 ;; esac
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' \
+            | tail -n +$((keep + 1)) \
+            | while read -r tag; do
+                gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
+              done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generation
+          path: |
+            ${{ runner.temp }}/out/generation.tar.gz
+            ${{ runner.temp }}/out/latest.json
