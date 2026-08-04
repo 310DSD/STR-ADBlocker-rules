@@ -152,6 +152,33 @@ jobs:
                 gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
               done
 
+      # Best-effort mirror prewarming. The release asset may be fetched from
+      # China-region accelerators first; hitting them from the runner right
+      # after publishing forces origin fetch + cache before devices request
+      # it. Each mirror is warmed on both the immutable tag URL and the
+      # always-current latest URL. Failures never fail the workflow.
+      - name: Warm mirror caches
+        continue-on-error: true
+        run: |
+          tag="rules-${{ steps.build.outputs.token }}"
+          release="https://github.com/$GITHUB_REPOSITORY/releases/download"
+          for url in \
+            "https://cors.isteed.cc/$release/latest/download/generation.tar.gz" \
+            "https://gh.ddlc.top/$release/latest/download/generation.tar.gz" \
+            "https://gh-proxy.com/$release/latest/download/generation.tar.gz" \
+            "https://ghfast.top/$release/latest/download/generation.tar.gz" \
+            "https://ghproxy.net/$release/latest/download/generation.tar.gz" \
+            "https://cors.isteed.cc/$release/$tag/generation.tar.gz" \
+            "https://gh.ddlc.top/$release/$tag/generation.tar.gz" \
+            "https://gh-proxy.com/$release/$tag/generation.tar.gz" \
+            "https://ghfast.top/$release/$tag/generation.tar.gz" \
+            "https://ghproxy.net/$release/$tag/generation.tar.gz"; do
+            echo "warming $url"
+            sleep 2
+            curl -fsSL --connect-timeout 15 --max-time 120 --retry 2 --retry-delay 3 \
+              -o /dev/null "$url" || echo "warm failed: $url"
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: generation
