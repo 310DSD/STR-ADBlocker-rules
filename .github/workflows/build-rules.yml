@@ -2,12 +2,13 @@ name: build-rules
 
 # Builds the production rules generation from the 7 provider sources on a
 # schedule, publishes it as an immutable GitHub Release asset, and lets the
-# STR AdBlocker module pull it with `bin/update.sh cloud <url>`.
+# module pull it with `bin/update.sh cloud <url>`.
 #
-# The production tooling is vendored in tools/ of this repository, so the
-# workflow runs standalone. If tools/ is ever absent, it falls back to the
-# module repository (defaults: <owner>/STR-ADBlocker, branch master; set
-# MODULE_REPO / MODULE_REF repository variables to override).
+# Deployment: copy this file into a dedicated rules repository (for example
+# <owner>/STR-ADBlocker-rules). The workflow uses the production tooling from
+# the module repository (defaults: <owner>/STR-ADBlocker, branch master; set
+# MODULE_REPO / MODULE_REF repository variables to override), or runs against
+# the current repository when it already contains tools/.
 
 on:
   workflow_dispatch:
@@ -35,8 +36,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  MODULE_REPO_INPUT: ${{ inputs.module_repo }}
-  MODULE_REF_INPUT: ${{ inputs.module_ref }}
   MODULE_REPO_DEFAULT: ${{ vars.MODULE_REPO }}
   MODULE_REF_DEFAULT: ${{ vars.MODULE_REF }}
   ENDPOINT_RAW_URL: ${{ vars.ENDPOINT_RAW_URL }}
@@ -48,17 +47,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve tooling source
+      - name: Resolve module tooling source
         id: resolve
         run: |
           if [ -f tools/compile_policy.py ]; then
             echo "tooling=repo" >> "$GITHUB_OUTPUT"
-            echo "workdir=." >> "$GITHUB_OUTPUT"
           else
-            repo="${MODULE_REPO_INPUT:-${MODULE_REPO_DEFAULT:-${{ github.repository_owner }}/STR-ADBlocker}}"
-            ref="${MODULE_REF_INPUT:-${MODULE_REF_DEFAULT:-master}}"
+            repo="${MODULE_REPO_DEFAULT:-${{ github.repository_owner }}/STR-ADBlocker}"
+            ref="${MODULE_REF_DEFAULT:-master}"
             echo "tooling=module" >> "$GITHUB_OUTPUT"
-            echo "workdir=module" >> "$GITHUB_OUTPUT"
             echo "module_repo=$repo" >> "$GITHUB_OUTPUT"
             echo "module_ref=$ref" >> "$GITHUB_OUTPUT"
           fi
@@ -75,12 +72,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pytest
-        run: pip install pytest
-
       - name: Build generation
         id: build
-        working-directory: ${{ steps.resolve.outputs.workdir }}
+        working-directory: ${{ steps.resolve.outputs.tooling == 'module' && 'module' || '.' }}
+        env:
+          STR_GENERATION_SIGNING_KEY: ${{ secrets.STR_GENERATION_SIGNING_KEY }}
         run: |
           python tools/build_cloud_generation.py \
             --work "$RUNNER_TEMP/work" \
@@ -100,15 +96,11 @@ jobs:
               print(f"{key}={latest[key]}")
           EOF
 
-      - name: Test compile chain
-        working-directory: ${{ steps.resolve.outputs.workdir }}
+      - name: Test module compile chain
+        working-directory: ${{ steps.resolve.outputs.tooling == 'module' && 'module' || '.' }}
         run: |
-          if [ -d tests ]; then
-            python -m pytest tests -q \
-              -k "compile_policy or compile_hotset or compile_ip_feed or cloud_generation or compile_rules or compile_hosts or hotset or policy"
-          else
-            echo "no local tests; generation build already exercised the compile chain"
-          fi
+          python -m pytest tests -q \
+            -k "compile_policy or compile_hotset or compile_ip_feed or cloud_generation or compile_rules or compile_hosts or hotset or policy"
 
       - name: Compare with previous release
         id: compare

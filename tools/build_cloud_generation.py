@@ -13,8 +13,11 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import re
+import subprocess
 import tarfile
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -48,6 +51,7 @@ DEFAULT_ENDPOINT_RAW = (
 
 GENERATION_FILES = (
     "endpoints.txt",
+    "generation.sig",
     "hotset.domains",
     "hotset.hosts",
     "hotset.manifest",
@@ -93,19 +97,67 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _openssl_sign(message: bytes, private_key_pem: bytes) -> bytes:
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        key_path = root / "key.pem"
+        message_path = root / "message.bin"
+        signature_path = root / "signature.bin"
+        key_path.write_bytes(private_key_pem)
+        message_path.write_bytes(message)
+        subprocess.run(
+            [
+                "openssl", "pkeyutl", "-sign", "-rawin",
+                "-inkey", str(key_path),
+                "-in", str(message_path),
+                "-out", str(signature_path),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return signature_path.read_bytes()
+
+
+def sign_generation(gen: Path, private_key_pem: bytes) -> str:
+    """Sign the generation manifest with an Ed25519 private key.
+
+    The signature covers the ASCII hex of the manifest sha256, matching the
+    module-side `fetch verify-gen` verifier. `generation.sig` is written into
+    the generation directory and packaged with the archive.
+    """
+    manifest = (gen / "manifest").read_bytes()
+    message = hashlib.sha256(manifest).hexdigest().encode("ascii")
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        key = serialization.load_pem_private_key(private_key_pem, password=None)
+        if not isinstance(key, Ed25519PrivateKey):
+            raise TypeError("STR_GENERATION_SIGNING_KEY is not an Ed25519 private key")
+        signature = key.sign(message)
+    except ImportError:
+        signature = _openssl_sign(message, private_key_pem)
+    hex_signature = signature.hex()
+    (gen / "generation.sig").write_text(hex_signature + "\n", encoding="ascii")
+    return hex_signature
+
+
 def package_generation(gen: Path, output: Path) -> str:
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = Path(str(output) + ".new")
     with tarfile.open(temporary, "w:gz") as archive:
         for name in sorted(GENERATION_FILES):
-            info = archive.gettarinfo(str(gen / name), arcname=name)
+            source = gen / name
+            if not source.is_file():
+                continue
+            info = archive.gettarinfo(str(source), arcname=name)
             info.mtime = 0
             info.uid = 0
             info.gid = 0
             info.uname = ""
             info.gname = ""
             info.mode = 0o644
-            with (gen / name).open("rb") as handle:
+            with source.open("rb") as handle:
                 archive.addfile(info, handle)
     temporary.replace(output)
     return sha256_bytes(output.read_bytes())
@@ -203,6 +255,9 @@ def build_cloud_generation(
     if int(hotset_manifest.get("hotset", "0")) != len(hotset_domains):
         raise ValueError("hotset count mismatch")
 
+    signing_key = os.environ.get("STR_GENERATION_SIGNING_KEY")
+    if signing_key:
+        sign_generation(gen, signing_key.encode())
     archive_digest = package_generation(gen, output / "generation.tar.gz")
     latest = {
         "token": stamp,
