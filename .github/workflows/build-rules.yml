@@ -99,6 +99,11 @@ jobs:
       - name: Test module compile chain
         working-directory: ${{ steps.resolve.outputs.tooling == 'module' && 'module' || '.' }}
         run: |
+          if [ ! -d tests ]; then
+            echo "tests/ not present in this repository; compile chain is covered by the module repo pipeline"
+            exit 0
+          fi
+          python -m pip install -q pytest
           python -m pytest tests -q \
             -k "compile_policy or compile_hotset or compile_ip_feed or cloud_generation or compile_rules or compile_hosts or hotset or policy"
 
