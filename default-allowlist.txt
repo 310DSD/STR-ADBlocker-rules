@@ -1,0 +1,9 @@
+# Bundled default allowlist, maintained independently from the user allowlist
+# (/data/adb/str-adblocker/allowlist.txt, edited in the WebUI). A domain also
+# allows all of its subdomains. The daemon loads this file in addition to the
+# user allowlist; the user blacklist still wins over both.
+#
+# ColorOS Fluid Cloud AI service: otherwise matched by the apps.coloros.com
+# suffix rule in the adblock policy, which breaks the Fluid Cloud jump/notice
+# feature on OPPO devices.
+iwisdom.apps.coloros.com

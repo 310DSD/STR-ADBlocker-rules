@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import gzip
 import hashlib
 import json
 import os
@@ -145,20 +146,25 @@ def sign_generation(gen: Path, private_key_pem: bytes) -> str:
 def package_generation(gen: Path, output: Path) -> str:
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = Path(str(output) + ".new")
-    with tarfile.open(temporary, "w:gz") as archive:
-        for name in sorted(GENERATION_FILES):
-            source = gen / name
-            if not source.is_file():
-                continue
-            info = archive.gettarinfo(str(source), arcname=name)
-            info.mtime = 0
-            info.uid = 0
-            info.gid = 0
-            info.uname = ""
-            info.gname = ""
-            info.mode = 0o644
-            with source.open("rb") as handle:
-                archive.addfile(info, handle)
+    with open(temporary, "wb") as raw:
+        # Pin the gzip header timestamp too; tarfile's "w:gz" mode embeds the
+        # current time, which makes otherwise identical generations differ
+        # across a second boundary and breaks reproducibility.
+        with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as compressed:
+            with tarfile.open(fileobj=compressed, mode="w") as archive:
+                for name in sorted(GENERATION_FILES):
+                    source = gen / name
+                    if not source.is_file():
+                        continue
+                    info = archive.gettarinfo(str(source), arcname=name)
+                    info.mtime = 0
+                    info.uid = 0
+                    info.gid = 0
+                    info.uname = ""
+                    info.gname = ""
+                    info.mode = 0o644
+                    with source.open("rb") as handle:
+                        archive.addfile(info, handle)
     temporary.replace(output)
     return sha256_bytes(output.read_bytes())
 
@@ -219,6 +225,7 @@ def build_cloud_generation(
         gen / "rules.bin",
         gen / "manifest",
         stamp,
+        stamp=stamp,
         allowlist=allowlist,
         endpoint_sources=endpoint_sources,
         endpoint_output=gen / "endpoints.txt" if endpoint_sources else None,
@@ -231,6 +238,7 @@ def build_cloud_generation(
         gen / "hotset.hosts",
         gen / "hotset.manifest",
         stamp,
+        stamp=stamp,
         allowlist=allowlist,
     )
     (gen / "hotset.domains").write_text(
@@ -261,7 +269,7 @@ def build_cloud_generation(
     archive_digest = package_generation(gen, output / "generation.tar.gz")
     latest = {
         "token": stamp,
-        "published_at": dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+        "published_at": stamp,
         "rules": len(policy.domains),
         "unsupported": policy.unsupported,
         "hotset": len(hotset_domains),
