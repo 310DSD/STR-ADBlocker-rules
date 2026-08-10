@@ -7,6 +7,12 @@ are available at:
 - https://github.com/hagezi/dns-blocklists
 - https://github.com/hagezi/dns-blocklists/blob/main/LICENSE
 
+The compiled `rules/rules.bin` is also built from OISD (big), copyright the
+OISD maintainer, distributed under GPL-3.0 per the upstream FAQ:
+
+- https://oisd.nl/
+- https://oisd.nl/faq
+
 STR AdBlocker extracts canonical domains, applies the allowlist, sorts and
 deduplicates them, and stores them in its mmap rule format. The ruleset manifest
 records the source URLs, build timestamp, count, and binary digest.

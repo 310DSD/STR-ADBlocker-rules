@@ -1,7 +1,7 @@
 # STR AdBlocker Rules
 
 STR AdBlocker 的云端规则构建仓库。GitHub Actions 每天 03:17 UTC 自动构建，也
-支持手动触发，把 7 个 provider 源的并集编译成 FlowGuard 生产 generation，
+支持手动触发，把 8 个 provider 源的并集编译成 FlowGuard 生产 generation，
 并以 GitHub Release 发布：
 
 - `generation.tar.gz`：模块 `bin/update.sh cloud` 直接消费的不可变 generation；
@@ -34,6 +34,7 @@ digest 与 provider digest 后才原子发布，失败时保留旧 generation。
 - 1Hosts Lite
 - AdGuard DNS / Base / Chinese
 - BanAD
+- OISD（big）
 
 构建工具链与派生产物遵循 GPL-3.0（见 `LICENSE`）；上游规则版权与许可证见
 `THIRD_PARTY_NOTICES.md`。

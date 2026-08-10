@@ -35,6 +35,7 @@ SOURCE_URLS = {
     "adguard-base": "https://filters.adtidy.org/extension/chromium/filters/2.txt",
     "adguard-chinese": "https://filters.adtidy.org/extension/chromium/filters/224.txt",
     "banad": "https://raw.githubusercontent.com/damengzhu/banad/main/jiekouAD.txt",
+    "oisd-big": "https://big.oisd.nl",
 }
 
 
