@@ -28,7 +28,7 @@ COMPILER_VERSION = "str-f2-policy-1"
 MAX_DOMAIN_BYTES = 253
 ENDPOINT_RE = re.compile(r"^(?P<address>[^,\s]+)[,\s]+(?P<protocol>\d+)[,\s]+(?P<port>\d+)[,\s]+(?P<action>observe|allow|block)[,\s]+(?P<confidence>unknown|observed|correlated|audited)[,\s]+(?P<source>unknown|provider|dns|tls|quic|companion)[,\s]+(?P<policy>\d+)[,\s]+(?P<ttl>\d+)(?:[,\s]+active)?$", re.I)
 SOURCE_URLS = {
-    "hagezi-normal": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/multi.txt",
+    "hagezi-normal": "https://codeberg.org/hagezi/mirror2/raw/branch/main/dns-blocklists/adblock/multi.txt",
     "antiad-easylist": "https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-easylist.txt",
     "1hosts-lite": "https://raw.githubusercontent.com/badmojr/1Hosts/master/Lite/domains.txt",
     "adguard-dns": "https://filters.adtidy.org/extension/chromium/filters/15.txt",

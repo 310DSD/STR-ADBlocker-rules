@@ -81,7 +81,7 @@ jobs:
           python tools/build_cloud_generation.py \
             --work "$RUNNER_TEMP/work" \
             --out "$RUNNER_TEMP/out" \
-            --source hagezi-normal=https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/multi.txt \
+            --source hagezi-normal=https://codeberg.org/hagezi/mirror2/raw/branch/main/dns-blocklists/adblock/multi.txt \
             --source antiad-easylist=https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-easylist.txt \
             --source 1hosts-lite=https://raw.githubusercontent.com/badmojr/1Hosts/master/Lite/domains.txt \
             --source adguard-dns=https://filters.adtidy.org/extension/chromium/filters/15.txt \

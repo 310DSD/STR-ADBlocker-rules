@@ -7,3 +7,7 @@
 # suffix rule in the adblock policy, which breaks the Fluid Cloud jump/notice
 # feature on OPPO devices.
 iwisdom.apps.coloros.com
+
+# Lanzou download hosts: dmpdmp.com is used as a per-file HTTP host
+# (for example u864111.dmpdmp.com) and was incorrectly covered by 1Hosts.
+dmpdmp.com

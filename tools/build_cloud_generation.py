@@ -35,9 +35,17 @@ except ImportError:  # Script execution from tools/ keeps the original CLI.
 
 SOURCE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 ENDPOINT_TTL = 86_400
+HAGEZI_NORMAL_PRIMARY = "https://codeberg.org/hagezi/mirror2/raw/branch/main/dns-blocklists/adblock/multi.txt"
+HAGEZI_NORMAL_GITLAB = "https://gitlab.com/hagezi/mirror/-/raw/main/dns-blocklists/adblock/multi.txt"
+HAGEZI_NORMAL_OLD_GITHUB = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/multi.txt"
+
+SOURCE_FALLBACKS = {
+    HAGEZI_NORMAL_PRIMARY: (HAGEZI_NORMAL_GITLAB,),
+    HAGEZI_NORMAL_OLD_GITHUB: (HAGEZI_NORMAL_PRIMARY, HAGEZI_NORMAL_GITLAB),
+}
 
 DEFAULT_SOURCES = (
-    "hagezi-normal=https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/multi.txt",
+    f"hagezi-normal={HAGEZI_NORMAL_PRIMARY}",
     "antiad-easylist=https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-easylist.txt",
     "1hosts-lite=https://raw.githubusercontent.com/badmojr/1Hosts/master/Lite/domains.txt",
     "adguard-dns=https://filters.adtidy.org/extension/chromium/filters/15.txt",
@@ -73,15 +81,19 @@ def parse_source(value: str) -> tuple[str, str]:
 def fetch(url: str, attempts: int = 4, timeout: int = 180) -> bytes:
     """Download with bounded retries. file:// is accepted for offline tests."""
     last_error: Exception | None = None
-    for attempt in range(attempts):
-        try:
-            request = urllib.request.Request(url, headers={"User-Agent": "STR-AdBlocker-rules/0.5"})
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                return response.read()
-        except (urllib.error.URLError, TimeoutError, OSError) as error:
-            last_error = error
-            if attempt + 1 < attempts:
-                time.sleep(2 * (attempt + 1))
+    candidates = (url, *SOURCE_FALLBACKS.get(url, ()))
+    for candidate in candidates:
+        for attempt in range(attempts):
+            try:
+                request = urllib.request.Request(candidate, headers={"User-Agent": "STR-AdBlocker-rules/0.5"})
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    return response.read()
+            except (urllib.error.URLError, TimeoutError, OSError) as error:
+                last_error = error
+                if isinstance(error, urllib.error.HTTPError) and error.code == 404:
+                    break
+                if attempt + 1 < attempts:
+                    time.sleep(2 * (attempt + 1))
     raise RuntimeError(f"download failed after {attempts} attempts: {url}: {last_error}")
 
 
