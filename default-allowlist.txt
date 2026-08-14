@@ -11,3 +11,103 @@ iwisdom.apps.coloros.com
 # Lanzou download hosts: dmpdmp.com is used as a per-file HTTP host
 # (for example u864111.dmpdmp.com) and was incorrectly covered by 1Hosts.
 dmpdmp.com
+
+# WeChat login/mini-program infrastructure: HTTPDNS and login-protocol
+# telemetry matched by adblock suffixes can stall login handshakes.
+aedns.weixin.qq.com
+dns.weixin.qq.com.cn
+log.wtlogin.qq.com
+log1.wtlogin.qq.com
+ssl.log.wtlogin.qq.com
+
+# NetEase Yidun risk-control SDK endpoints used by login/authorization flows
+# (mini-program SDK, behavior verification, device fingerprint, one-tap
+# sign-in); blocking them makes authorization wait or fail.
+ir-sdk.dun.163.com
+ir-sdk.dun.163yun.com
+ac.dun.163.com
+ac.dun.163yun.com
+fp-upload.dun.163.com
+ye.dun.163yun.com
+
+# Huawei Smart Life / HMS connectivity used by device-page links and AGC
+# service gateways.
+connect-dre.hispace.hicloud.com
+awap2.jos.hicloud.com
+awap3.jos.hicloud.com
+
+# Tencent QQ P2P acceleration (p2p.qq.com and its subdomains were listed by
+# adblock sources as bandwidth/tracking endpoints).
+p2p.qq.com
+
+# Arknights (Hypergryph) telemetry endpoints; blocking them can stall login
+# and in-game announcements.
+data-track.yingxiong.com
+data-track-global.yingxiong.com
+
+# HeyTap functional services (firmware/config distribution, download, cloud
+# sync, push). Advertising subdomains under heytapmobi/heytapmobile are NOT
+# covered: only these non-ad families are allowed.
+heytapdl.com
+heytapdownload.com
+ocloud.heytapmobi.com
+cdo.heytapmobi.com
+cdo.heytapmobile.com
+push.heytapmobile.com
+
+# Arknights cloud log service on Aliyun (ark-cls project); the game's base
+# mode can lose connectivity while telemetry waits.
+ark-cls.cn-hangzhou.log.aliyuncs.com
+
+# ColorOS smartcard service domains (adblock sources list them as telemetry).
+smartcard.apps.coloros.com
+smartcardf.apps.coloros.com
+smartcardf-eu.apps.coloros.com
+
+# QQ Browser novel channel functional endpoints. novelsns/recmd serve the
+# novel feed; applog.reader.qq.com is also blocked by the hosts hotset, which
+# explains why the WebUI activity page shows nothing while the feature loses
+# connectivity (hosts resolution never reaches the daemon).
+novelsns.html5.qq.com
+recmd.html5.qq.com
+applog.reader.qq.com
+newlog.reader.qq.com
+log6.reader.qq.com
+unitelogreport.reader.qq.com
+
+# ByteDance tnc0-alisc1 endpoint; upstream lists it although it is a
+# functional API host, not an ad endpoint.
+tnc0-alisc1.zijieapi.com
+
+# QQ Browser functional infrastructure: browser config and WeChat login/NAT
+# acceleration. These were also present in the hosts hotset, so resolution
+# failed locally without any daemon-side block record.
+cfg.imtt.qq.com
+apd-pcdnwxlogin.teg.tencent-cloud.net
+apd-pcdnwxnat.teg.tencent-cloud.net
+
+# NetEase Sky (guangyu) connectivity: game gateway, registration, HTTPDNS.
+g.163.com
+fl.reg.163.com
+httpdns.n.netease.com
+httpdns-sdk.n.netease.com
+
+# Xiaomi store rewarded/featured endpoint used by the market app.
+wtradv.market.xiaomi.com
+
+# 123pan service endpoint (bdad) is blocked in both rules and the hosts
+# hotset; the client stalls without any daemon-side record when it resolves
+# locally to 0.0.0.0.
+bdad.123pan.cn
+
+# BBC account/activity/login APIs. a1.api.bbc.com and a1.api.bbc.co.uk were
+# also present in the hosts hotset (local 0.0.0.0), so the site breaks with
+# no daemon-side record; the federated-id endpoint backs the sign-in flow.
+a1.api.bbc.com
+a1.api.bbc.co.uk
+activity.api.bbc.com
+nsi.activity.api.bbc.com
+activity.api.bbc.co.uk
+nsi.activity.api.bbc.co.uk
+federated-id.live.api.bbc.co.uk
+
