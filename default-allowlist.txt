@@ -131,3 +131,27 @@ onepass.geetest.com
 # functional resolver service, and blocking it forces fallback to system DNS,
 # which slows login and general connectivity.
 httpdns.volcengineapi.com
+
+# Aliyun phone-number auth / real-person verification API used by one-tap
+# login flows; upstream lists it as telemetry.
+cloudauth.aliyuncs.com
+
+# MobTech phone-verify / one-tap login SDK. The mob.com registered domain is
+# the MobTech service; same-suffix ad networks (admob.com, ezmob.com,
+# silvermob.com, ...) are separate registrations and remain blocked.
+api.verify.mob.com
+verify.mob.com
+cdn-api-verify.mob.com
+init.sms.mob.com
+log-verify.mob.com
+sdk.guard.mob.com
+
+# Jiguang JVerification carrier one-tap login SDK.
+verification.jiguang.cn
+sdk.verification.jiguang.cn
+
+# Risk-control SDK families used by login flows (Shumei fengkongcloud.com,
+# Tongdun tongdun.net). Their config and fingerprint endpoints are listed by
+# adblock sources; blocking them makes login risk-control wait and stall.
+fengkongcloud.com
+tongdun.net
