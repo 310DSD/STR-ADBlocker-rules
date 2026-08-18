@@ -111,3 +111,23 @@ activity.api.bbc.co.uk
 nsi.activity.api.bbc.co.uk
 federated-id.live.api.bbc.co.uk
 
+# Tencent MSDK (mobile QQ/WeChat login SDK used by Tencent games such as
+# 金铲铲之战): a.ssl.msdk.qq.com is the MSDK session API and
+# img.ssl.msdk.qq.com serves the QQ authorization page assets; hagezi lists
+# them as telemetry, which stalls game login.
+a.ssl.msdk.qq.com
+img.ssl.msdk.qq.com
+
+# Carrier one-tap login SDKs used by Douyin phone/carrier login flows. hagezi
+# and anti-AD list the China Mobile OneAuth config bootstrap (cmpassport.com)
+# and the China Unicom OneAuth gateway (wostore.cn); blocking them makes
+# one-tap login wait out the SDK timeout and fall back to SMS. Geetest onepass
+# backs risk-control verification for the same flows.
+cmpassport.com
+wostore.cn
+onepass.geetest.com
+
+# ByteDance HTTPDNS API used by Douyin; upstream lists it although it is a
+# functional resolver service, and blocking it forces fallback to system DNS,
+# which slows login and general connectivity.
+httpdns.volcengineapi.com
