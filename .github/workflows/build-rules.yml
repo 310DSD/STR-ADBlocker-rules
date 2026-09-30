@@ -78,6 +78,14 @@ jobs:
         env:
           STR_GENERATION_SIGNING_KEY: ${{ secrets.STR_GENERATION_SIGNING_KEY }}
         run: |
+          if [ "${{ steps.resolve.outputs.tooling }}" = "module" ]; then
+            allowlist="$GITHUB_WORKSPACE/module/config/default-allowlist.txt"
+          elif [ -f "$GITHUB_WORKSPACE/default-allowlist.txt" ]; then
+            allowlist="$GITHUB_WORKSPACE/default-allowlist.txt"
+          else
+            allowlist="$GITHUB_WORKSPACE/config/default-allowlist.txt"
+          fi
+          test -s "$allowlist" || { echo "canonical allowlist is missing: $allowlist" >&2; exit 1; }
           python tools/build_cloud_generation.py \
             --work "$RUNNER_TEMP/work" \
             --out "$RUNNER_TEMP/out" \
@@ -90,7 +98,9 @@ jobs:
             --source banad=https://raw.githubusercontent.com/damengzhu/banad/main/jiekouAD.txt \
             --source oisd-big=https://big.oisd.nl \
             --endpoint-raw-url "${ENDPOINT_RAW_URL:-https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Advertising/Advertising.list}" \
-            --allowlist "$GITHUB_WORKSPACE/default-allowlist.txt"
+            --allowlist "$allowlist" \
+            --min-rules 100000 \
+            --min-sources 2
           python - "$RUNNER_TEMP/out/latest.json" <<'EOF' >> "$GITHUB_OUTPUT"
           import json, sys
           latest = json.load(open(sys.argv[1]))
@@ -170,10 +180,3 @@ jobs:
             curl -fsSL --connect-timeout 15 --max-time 120 --retry 2 --retry-delay 3 \
               -o /dev/null "$url" || echo "warm failed: $url"
           done
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: generation
-          path: |
-            ${{ runner.temp }}/out/generation.tar.gz
-            ${{ runner.temp }}/out/latest.json

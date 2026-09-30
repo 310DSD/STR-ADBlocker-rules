@@ -2,7 +2,8 @@
 
 STR AdBlocker 的云端规则构建仓库。GitHub Actions 每天 03:17 UTC 自动构建，也
 支持手动触发，把 8 个 provider 源的并集编译成 FlowGuard 生产 generation，
-并以 GitHub Release 发布：
+并以 GitHub Release 发布。当前使用全局共识策略：完整主机至少被 2 个 provider
+同时收录才进入 generation；这会减少单源误报，但也会降低规则覆盖。
 
 - `generation.tar.gz`：模块 `bin/update.sh cloud` 直接消费的不可变 generation；
 - `latest.json`：token、规则数、provider digest 等元数据，用于变更检测。

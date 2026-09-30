@@ -24,7 +24,7 @@ except ImportError:  # Script execution from tools/ keeps the original CLI.
     from compile_hosts import normalize_domain, parse_allowlist
     from compile_rules import compile_rules
 
-COMPILER_VERSION = "str-f2-policy-1"
+COMPILER_VERSION = "str-f2-policy-2"
 MAX_DOMAIN_BYTES = 253
 ENDPOINT_RE = re.compile(r"^(?P<address>[^,\s]+)[,\s]+(?P<protocol>\d+)[,\s]+(?P<port>\d+)[,\s]+(?P<action>observe|allow|block)[,\s]+(?P<confidence>unknown|observed|correlated|audited)[,\s]+(?P<source>unknown|provider|dns|tls|quic|companion)[,\s]+(?P<policy>\d+)[,\s]+(?P<ttl>\d+)(?:[,\s]+active)?$", re.I)
 SOURCE_URLS = {
@@ -46,6 +46,13 @@ class ProviderResult:
     endpoint_lines: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class _ProviderLine:
+    domain: str | None
+    exception: bool = False
+    unsupported: bool = False
+
+
 def allowed_domain(domain: str, allowlist: set[str]) -> bool:
     labels = domain.split(".")
     return any(".".join(labels[index:]) in allowlist for index in range(len(labels) - 1))
@@ -61,53 +68,75 @@ def _adblock_domain(token: str) -> str | None:
     return normalize_domain(token)
 
 
-def parse_provider_line(raw: str, allowlist: set[str]) -> tuple[str | None, bool]:
-    """Return (domain, unsupported) for one provider line.
+def _parse_provider_line(raw: str) -> _ProviderLine:
+    """Parse one line without applying the device allowlist.
 
-    Unsupported is true only for a non-empty rule that is not in the bounded
-    network subset. Empty comments and valid allowlist exceptions are ignored.
+    The only supported exception syntax is an exact, context-free network
+    exception. Browser-context modifiers are intentionally rejected instead of
+    being guessed as global exceptions.
     """
 
     line = raw.strip()
     if line.startswith("#") and not line.startswith("##"):
-        return None, False
+        return _ProviderLine(None)
     line = re.split(r"\s+#", line, maxsplit=1)[0].strip()
     if not line:
-        return None, False
-    if line.startswith("@@"):
-        return None, False
+        return _ProviderLine(None)
+    exception = line.startswith("@@")
+    if exception:
+        line = line[2:]
     if line.startswith("||"):
-        # Keep this parser byte-for-byte compatible with bin/update.sh. The
-        # production updater intentionally accepts only the bounded
-        # ||domain^ form; browser-only/options rules are ignored.
-        if not re.fullmatch(r"\|\|[a-z0-9.-]+\^(?:\$)?", line):
-            return None, True
+        pattern = r"\|\|[a-z0-9.-]+\^(?:\$)?"
+        if not re.fullmatch(pattern, line):
+            return _ProviderLine(None, unsupported=True)
         domain = _adblock_domain(line)
         if domain is None:
-            return None, True
-        return (None if allowed_domain(domain, allowlist) else domain), False
+            return _ProviderLine(None, unsupported=True)
+        return _ProviderLine(domain, exception=exception)
+    if exception:
+        return _ProviderLine(None, unsupported=True)
     fields = line.split()
     if len(fields) == 1:
         domain = normalize_domain(fields[0])
         if domain is None:
-            return None, True
-        return (None if allowed_domain(domain, allowlist) else domain), False
+            return _ProviderLine(None, unsupported=True)
+        return _ProviderLine(domain)
     if fields[0] in {"0.0.0.0", "127.0.0.1", "::", "::1"} and len(fields) >= 2:
         domain = normalize_domain(fields[1])
         if domain is None:
-            return None, True
-        return (None if allowed_domain(domain, allowlist) else domain), False
-    return None, True
+            return _ProviderLine(None, unsupported=True)
+        return _ProviderLine(domain)
+    return _ProviderLine(None, unsupported=True)
+
+
+def parse_provider_line(raw: str, allowlist: set[str]) -> tuple[str | None, bool]:
+    """Return (domain, unsupported) for one provider line.
+
+    Keep this compatibility helper focused on block output. Valid provider
+    exceptions are consumed by parse_provider as source-local cancellation and
+    do not appear as global allow rules.
+    """
+
+    parsed = _parse_provider_line(raw)
+    if parsed.exception or parsed.domain is None or allowed_domain(parsed.domain, allowlist):
+        return None, parsed.unsupported
+    return parsed.domain, parsed.unsupported
 
 
 def parse_provider(text: str, allowlist: set[str]) -> ProviderResult:
-    domains: set[str] = set()
+    source_blocks: set[str] = set()
+    source_exceptions: set[str] = set()
     unsupported = 0
     for raw in text.splitlines():
-        domain, rejected = parse_provider_line(raw, allowlist)
-        unsupported += int(rejected)
-        if domain and domain != "localhost":
-            domains.add(domain)
+        parsed = _parse_provider_line(raw)
+        unsupported += int(parsed.unsupported)
+        if not parsed.domain or parsed.domain == "localhost":
+            continue
+        if parsed.exception:
+            source_exceptions.add(parsed.domain)
+        elif not allowed_domain(parsed.domain, allowlist):
+            source_blocks.add(parsed.domain)
+    domains = source_blocks - source_exceptions
     return ProviderResult(tuple(sorted(domains)), unsupported, ())
 
 
@@ -159,20 +188,31 @@ def compile_policy(
     min_rules: int = 1,
     max_rules: int = 2_500_000,
     stamp: str | None = None,
+    min_sources: int = 1,
 ) -> ProviderResult:
     endpoint_sources = endpoint_sources or []
     if endpoint_sources and endpoint_output is None:
         raise ValueError("endpoint_output is required when endpoint sources are provided")
     allow = parse_allowlist(allowlist.read_text(encoding="utf-8") if allowlist else "")
+    if min_sources < 1 or min_sources > len(sources):
+        raise ValueError("min_sources must be within the source count")
     domains: set[str] = set()
     unsupported = 0
     source_digests: list[tuple[str, str]] = []
+    source_domains: list[set[str]] = []
     for source in sources:
         data = source.read_text(encoding="utf-8")
         result = parse_provider(data, allow)
         domains.update(result.domains)
+        source_domains.append(set(result.domains))
         unsupported += result.unsupported
         source_digests.append((source.name, hashlib.sha256(data.encode("utf-8")).hexdigest()))
+    if min_sources > 1:
+        counts: dict[str, int] = {}
+        for source_domains_set in source_domains:
+            for domain in source_domains_set:
+                counts[domain] = counts.get(domain, 0) + 1
+        domains = {domain for domain, count in counts.items() if count >= min_sources}
     if not min_rules <= len(domains) <= max_rules:
         raise ValueError(f"refusing suspicious ruleset with {len(domains)} entries")
     endpoint_lines: tuple[str, ...] = ()
@@ -198,6 +238,7 @@ def compile_policy(
         f"compiler={COMPILER_VERSION}",
         f"compiled_at={stamp}",
         f"unsupported_rule_count={unsupported}",
+        f"min_provider_matches={min_sources}",
         f"endpoint_count={len(endpoint_lines)}",
         "sources=" + ",".join(name for name, _ in source_digests),
     ]
@@ -236,6 +277,7 @@ def main() -> int:
     parser.add_argument("--ruleset", required=True)
     parser.add_argument("--min-rules", type=int, default=1)
     parser.add_argument("--max-rules", type=int, default=2_500_000)
+    parser.add_argument("--min-sources", type=int, default=1)
     args = parser.parse_args()
     result = compile_policy(
         args.source,
@@ -247,6 +289,7 @@ def main() -> int:
         args.endpoint_output,
         args.min_rules,
         args.max_rules,
+        min_sources=args.min_sources,
     )
     print(f"compiled rules={len(result.domains)} unsupported={result.unsupported} endpoints={len(result.endpoint_lines)}")
     return 0

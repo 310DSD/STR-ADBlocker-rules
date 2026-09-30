@@ -45,7 +45,7 @@ SOURCE_FALLBACKS = {
 }
 
 DEFAULT_SOURCES = (
-    f"hagezi-normal={HAGEZI_NORMAL_PRIMARY}",
+    "hagezi-normal=https://codeberg.org/hagezi/mirror2/raw/branch/main/dns-blocklists/adblock/multi.txt",
     "antiad-easylist=https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-easylist.txt",
     "1hosts-lite=https://raw.githubusercontent.com/badmojr/1Hosts/master/Lite/domains.txt",
     "adguard-dns=https://filters.adtidy.org/extension/chromium/filters/15.txt",
@@ -191,6 +191,7 @@ def build_cloud_generation(
     stamp: str | None = None,
     min_rules: int = 300_000,
     max_rules: int = 2_500_000,
+    min_sources: int = 1,
 ) -> dict[str, object]:
     if not sources:
         sources = [parse_source(item) for item in DEFAULT_SOURCES]
@@ -244,6 +245,7 @@ def build_cloud_generation(
         endpoint_output=gen / "endpoints.txt" if endpoint_sources else None,
         min_rules=min_rules,
         max_rules=max_rules,
+        min_sources=min_sources,
     )
     hotset_domains = compile_hotset(
         source_paths,
@@ -253,6 +255,7 @@ def build_cloud_generation(
         stamp,
         stamp=stamp,
         allowlist=allowlist,
+        min_sources=min_sources,
     )
     (gen / "hotset.domains").write_text(
         "".join(f"{domain}\n" for domain in hotset_domains), encoding="ascii", newline=""
@@ -314,6 +317,7 @@ def main() -> int:
     parser.add_argument("--stamp")
     parser.add_argument("--min-rules", type=int, default=300_000)
     parser.add_argument("--max-rules", type=int, default=2_500_000)
+    parser.add_argument("--min-sources", type=int, default=1)
     args = parser.parse_args()
     build_cloud_generation(
         args.work,
@@ -324,6 +328,7 @@ def main() -> int:
         args.stamp,
         args.min_rules,
         args.max_rules,
+        args.min_sources,
     )
     return 0
 

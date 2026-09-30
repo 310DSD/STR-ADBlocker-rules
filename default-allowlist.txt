@@ -3,10 +3,151 @@
 # allows all of its subdomains. The daemon loads this file in addition to the
 # user allowlist; the user blacklist still wins over both.
 #
+# OxygenOS/ColorOS network validation. These exact probe hosts are used by
+# the system network monitor; blocking them makes a working connection appear
+# unvalidated (especially after a region or carrier transition).
+conn1.oppomobile.com
+conn1.coloros.com
+conn2.coloros.com
+conn3.coloros.com
+conn4.coloros.com
+conn5.coloros.com
+
 # ColorOS Fluid Cloud AI service: otherwise matched by the apps.coloros.com
 # suffix rule in the adblock policy, which breaks the Fluid Cloud jump/notice
 # feature on OPPO devices.
 iwisdom.apps.coloros.com
+
+# ColorOS/Oplus functional infrastructure. Family entries cover regional
+# variants. Ad-serving families under ads.oppomobile.com, ads.heytapmobi.com
+# and ads.heytapmobile.com remain blocked.
+api.open.oppomobile.com
+api.dns.oppomobile.com
+dns.oppomobile.com
+httpdns.ocloud.oppomobile.com
+httpdns.push.oppomobile.com
+logistics.apps.oppomobile.com
+location.apps.oppomobile.com
+i6.weather.oppomobile.com
+proxyeu.apps.oppomobile.com
+proxyf.apps.oppomobile.com
+tips.apps.oppomobile.com
+tipsf.apps.oppomobile.com
+stickereu.apps.oppomobile.com
+stickerf.apps.oppomobile.com
+imagzine.oppomobile.com
+dhfs-id.oppomobile.com
+dhfs-vn.oppomobile.com
+api-id.game.heytapmobi.com
+api-id.theme.heytapmobi.com
+api-id.theme.heytapmobile.com
+httpdns-euex-push.heytapmobile.com
+dhfs-id.heytapimage.com
+dhfs-in.heytapimage.com
+dhfs-my.heytapimage.com
+dhfs-ph.heytapimage.com
+cloudconf-app-ae.heytapmobile.com
+cloudconf-app-ar.heytapmobile.com
+cloudconf-app-at.heytapmobile.com
+cloudconf-app-au.heytapmobile.com
+cloudconf-app-bd.heytapmobile.com
+cloudconf-app-be.heytapmobile.com
+cloudconf-app-bh.heytapmobile.com
+cloudconf-app-bo.heytapmobile.com
+cloudconf-app-br.heytapmobile.com
+cloudconf-app-by.heytapmobile.com
+cloudconf-app-ca.heytapmobile.com
+cloudconf-app-ch.heytapmobile.com
+cloudconf-app-co.heytapmobile.com
+cloudconf-app-cr.heytapmobile.com
+cloudconf-app-cz.heytapmobile.com
+cloudconf-app-de.heytapmobile.com
+cloudconf-app-dk.heytapmobile.com
+cloudconf-app-dz.heytapmobile.com
+cloudconf-app-eg.heytapmobile.com
+cloudconf-app-es.heytapmobile.com
+cloudconf-app-eu.heytapmobile.com
+cloudconf-app-fi.heytapmobile.com
+cloudconf-app-fr.heytapmobile.com
+cloudconf-app-gb.heytapmobile.com
+cloudconf-app-gr.heytapmobile.com
+cloudconf-app-hk.heytapmobile.com
+cloudconf-app-hn.heytapmobile.com
+cloudconf-app-id.heytapmobile.com
+cloudconf-app-ie.heytapmobile.com
+cloudconf-app-il.heytapmobile.com
+cloudconf-app-in.heytapmobile.com
+cloudconf-app-iq.heytapmobile.com
+cloudconf-app-ir.heytapmobile.com
+cloudconf-app-it.heytapmobile.com
+cloudconf-app-jo.heytapmobile.com
+cloudconf-app-jp.heytapmobile.com
+cloudconf-app-ke.heytapmobile.com
+cloudconf-app-kh.heytapmobile.com
+cloudconf-app-kw.heytapmobile.com
+cloudconf-app-kz.heytapmobile.com
+cloudconf-app-lk.heytapmobile.com
+cloudconf-app-ly.heytapmobile.com
+cloudconf-app-ma.heytapmobile.com
+cloudconf-app-mm.heytapmobile.com
+cloudconf-app-mx.heytapmobile.com
+cloudconf-app-my.heytapmobile.com
+cloudconf-app-ng.heytapmobile.com
+cloudconf-app-nl.heytapmobile.com
+cloudconf-app-np.heytapmobile.com
+cloudconf-app-nz.heytapmobile.com
+cloudconf-app-om.heytapmobile.com
+cloudconf-app-pe.heytapmobile.com
+cloudconf-app-ph.heytapmobile.com
+cloudconf-app-pk.heytapmobile.com
+cloudconf-app-pl.heytapmobile.com
+cloudconf-app-ps.heytapmobile.com
+cloudconf-app-pt.heytapmobile.com
+cloudconf-app-qa.heytapmobile.com
+cloudconf-app-ro.heytapmobile.com
+cloudconf-app-ru.heytapmobile.com
+cloudconf-app-sa.heytapmobile.com
+cloudconf-app-se.heytapmobile.com
+cloudconf-app-sg.heytapmobile.com
+cloudconf-app-th.heytapmobile.com
+cloudconf-app-tn.heytapmobile.com
+cloudconf-app-tr.heytapmobile.com
+cloudconf-app-tw.heytapmobile.com
+cloudconf-app-ua.heytapmobile.com
+cloudconf-app-us.heytapmobile.com
+cloudconf-app-vn.heytapmobile.com
+cloudconf-app-za.heytapmobile.com
+browser-api-br.heytapmobile.com
+browser-api-fr.heytapmobile.com
+browser-api-gl.heytapmobile.com
+browser-api-id.heytapmobile.com
+browser-api-in.heytapmobile.com
+browser-api-my.heytapmobile.com
+browser-api-ph.heytapmobile.com
+browser-api-ru.heytapmobile.com
+browser-api-th.heytapmobile.com
+browser-api-us.heytapmobile.com
+browser-api-vn.heytapmobile.com
+browser-api-za.heytapmobile.com
+browser-sdk-fr.heytapmobile.com
+browser-sdk-in.heytapmobile.com
+browser-sdk-ru.heytapmobile.com
+video-api-fr.heytapmobile.com
+video-api-gl.heytapmobile.com
+video-api-in.heytapmobile.com
+video-api-ru.heytapmobile.com
+virusinfo-cloudscan-cn.heytapmobi.com
+iot-earbuds-cn.heytapmobi.com
+oversea-nebula-in.heytapmobi.com
+oversea-nebula-sg.heytapmobi.com
+img-c.heytapimage.com
+cc-img-cn.heytapimage.com
+
+# Kugou KRC/service CDN. Do not allow service.kugou.com: sibling ad and
+# telemetry hosts remain intentionally blocked.
+kmrcdn.service.kugou.com
+kmr.service.kugou.com
+serveraddr.service.kugou.com
 
 # Lanzou download hosts: dmpdmp.com is used as a per-file HTTP host
 # (for example u864111.dmpdmp.com) and was incorrectly covered by 1Hosts.
@@ -19,6 +160,14 @@ dns.weixin.qq.com.cn
 log.wtlogin.qq.com
 log1.wtlogin.qq.com
 ssl.log.wtlogin.qq.com
+
+# WeChat Mini Program service and static-asset hosts. All three are listed by
+# multiple upstream adblock sources, but are served by Tencent infrastructure
+# and blocking them stalls Mini Program page loads. Do not allow wxs.qq.com:
+# its sibling/subdomain space includes advertising and tracking endpoints.
+wxa.wxs.qq.com
+wximg.wxs.qq.com
+wxsmw.wxs.qq.com
 
 # NetEase Yidun risk-control SDK endpoints used by login/authorization flows
 # (mini-program SDK, behavior verification, device fingerprint, one-tap
@@ -91,6 +240,54 @@ g.163.com
 fl.reg.163.com
 httpdns.n.netease.com
 httpdns-sdk.n.netease.com
+
+# Xiaomi functional infrastructure. micloud.xiaomi.net covers Find Device,
+# camera filter resources and Mi Cloud status/API hosts; regional push and
+# message resolvers are covered by their family entries. Telemetry, ad SDKs,
+# Mistat and generic pandora hosts remain blocked.
+micloud.xiaomi.net
+findapi.micloud.xiaomi.net
+api.device.xiaomi.net
+api.hybrid.xiaomi.com
+api.installer.xiaomi.com
+api.developer.xiaomi.com
+api.miui.security.xiaomi.com
+xmpush.global.xiaomi.com
+xmpush.xiaomi.com
+fds.api.xiaomi.com
+fds-ssl.api.xiaomi.com
+resolver.msg.global.xiaomi.net
+resolver.mi.xiaomi.com
+sec-cdn.static.xiaomi.net
+sec-cdn.static.intl.xiaomi.net
+sec.resource.xiaomi.net
+lxcdn.dl.files.xiaomi.net
+appstore.pandora.xiaomi.com
+appstore.cdn.pandora.xiaomi.com
+gallery.pandora.xiaomi.com
+gallery.cdn.pandora.xiaomi.com
+
+# Xiaomi system/service APIs and browser/IoT infrastructure. Data-collection,
+# newsfeed, advertising and Mistat hosts remain blocked.
+api.sec.miui.com
+api.calendar.intl.miui.com
+api.launcher.intl.miui.com
+api.setting.intl.miui.com
+api.sms.intl.miui.com
+api.transfer.sec.miui.com
+api-middle.transfer.sec.miui.com
+api.browser.miui.com
+api.browser.intl.miui.com
+api-ipv4.browser.miui.com
+httpdns.browser.miui.com
+cdn.browser.miui.com
+file-s1.browser.miui.com
+browser.miui.com
+app.miui.com
+app.greengurad.sec.miui.com
+srv.greenguard.sec.miui.com
+idm.iot.mi.com
+idm.api.io.mi.com
 
 # Xiaomi store rewarded/featured endpoint used by the market app.
 wtradv.market.xiaomi.com

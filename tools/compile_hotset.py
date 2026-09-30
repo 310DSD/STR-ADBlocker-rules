@@ -19,12 +19,22 @@ except ImportError:  # Script execution from tools/ keeps the original CLI.
     from compile_hosts import normalize_domain, parse_allowlist
     from compile_policy import parse_provider
 
-COMPILER_VERSION = "str-hotset-1"
+COMPILER_VERSION = "str-hotset-2"
 MAX_DOMAIN_BYTES = 253
 
 
 def _valid_hotset_domain(domain: str) -> bool:
     return bool(domain and len(domain.encode("ascii", "ignore")) <= MAX_DOMAIN_BYTES and domain != "localhost")
+
+
+def protected_hosts_suffixes(allowlist: set[str]) -> set[str]:
+    """Return hosts suffixes that would override an explicitly allowed child."""
+    protected: set[str] = set()
+    for domain in allowlist:
+        labels = domain.split(".")
+        for index in range(len(labels)):
+            protected.add(".".join(labels[index:]))
+    return protected
 
 
 def choose_hotset(
@@ -34,12 +44,22 @@ def choose_hotset(
     antiad_limit: int = 6_000,
     hagezi_limit: int = 4_000,
     maximum: int = 30_000,
+    min_sources: int = 1,
 ) -> tuple[str, ...]:
     parsed: dict[str, set[str]] = {}
     for name, text in source_texts.items():
         parsed[name] = set(parse_provider(text, allowlist).domains)
     if not parsed:
         raise ValueError("hotset requires at least one source")
+    if min_sources < 1 or min_sources > len(parsed):
+        raise ValueError("min_sources must be within the source count")
+    if min_sources > 1:
+        counts: dict[str, int] = {}
+        for domains in parsed.values():
+            for domain in domains:
+                counts[domain] = counts.get(domain, 0) + 1
+        consensus = {domain for domain, count in counts.items() if count >= min_sources}
+        parsed = {name: domains & consensus for name, domains in parsed.items()}
     if {"hagezi-normal", "antiad-easylist"}.issubset(parsed):
         common = parsed["hagezi-normal"] & parsed["antiad-easylist"]
         antiad_only = parsed["antiad-easylist"] - parsed["hagezi-normal"]
@@ -48,9 +68,10 @@ def choose_hotset(
         common = set()
         antiad_only = set()
         hagezi_only = set().union(*parsed.values())
+    protected = protected_hosts_suffixes(allowlist)
 
     def eligible(items: set[str]) -> list[str]:
-        return sorted(item for item in items if _valid_hotset_domain(item))
+        return sorted(item for item in items if _valid_hotset_domain(item) and item not in protected)
 
     selected: list[str] = []
     selected.extend(eligible(common)[:common_limit])
@@ -92,12 +113,13 @@ def compile_hotset(
     hagezi_limit: int = 4_000,
     maximum: int = 30_000,
     stamp: str | None = None,
+    min_sources: int = 1,
 ) -> tuple[str, ...]:
     if len(sources) != len(labels) or not labels or len(set(labels)) != len(labels):
         raise ValueError("sources must have unique labels")
     source_texts = {label: source.read_text(encoding="utf-8") for label, source in zip(labels, sources)}
     allow = parse_allowlist(allowlist.read_text(encoding="utf-8") if allowlist else "")
-    domains = choose_hotset(source_texts, allow, common_limit, antiad_limit, hagezi_limit, maximum)
+    domains = choose_hotset(source_texts, allow, common_limit, antiad_limit, hagezi_limit, maximum, min_sources)
     payload = render_hosts(domains, ruleset).encode("ascii")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(payload)
@@ -117,6 +139,7 @@ def compile_hotset(
         f"common_limit={common_limit}",
         f"antiad_limit={antiad_limit}",
         f"hagezi_limit={hagezi_limit}",
+        f"min_provider_matches={min_sources}",
         f"allowlist_sha256={allow_digest}",
         f"provider_sha256={provider_hasher.hexdigest()}",
     ]
@@ -138,6 +161,7 @@ def main() -> int:
     parser.add_argument("--antiad-limit", type=int, default=6_000)
     parser.add_argument("--hagezi-limit", type=int, default=4_000)
     parser.add_argument("--max-domains", type=int, default=30_000)
+    parser.add_argument("--min-sources", type=int, default=1)
     args = parser.parse_args()
     domains = compile_hotset(
         args.source,
@@ -150,6 +174,7 @@ def main() -> int:
         args.antiad_limit,
         args.hagezi_limit,
         args.max_domains,
+        min_sources=args.min_sources,
     )
     print(f"compiled hotset={len(domains)}")
     return 0
