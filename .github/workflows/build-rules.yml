@@ -86,6 +86,14 @@ jobs:
             allowlist="$GITHUB_WORKSPACE/config/default-allowlist.txt"
           fi
           test -s "$allowlist" || { echo "canonical allowlist is missing: $allowlist" >&2; exit 1; }
+          if [ "${{ steps.resolve.outputs.tooling }}" = "module" ]; then
+            families="$GITHUB_WORKSPACE/module/config/sensitive-families.txt"
+          elif [ -f "$GITHUB_WORKSPACE/sensitive-families.txt" ]; then
+            families="$GITHUB_WORKSPACE/sensitive-families.txt"
+          else
+            families="$GITHUB_WORKSPACE/config/sensitive-families.txt"
+          fi
+          test -s "$families" || { echo "sensitive family list is missing: $families" >&2; exit 1; }
           python tools/build_cloud_generation.py \
             --work "$RUNNER_TEMP/work" \
             --out "$RUNNER_TEMP/out" \
@@ -99,8 +107,10 @@ jobs:
             --source oisd-big=https://big.oisd.nl \
             --endpoint-raw-url "${ENDPOINT_RAW_URL:-https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Advertising/Advertising.list}" \
             --allowlist "$allowlist" \
-            --min-rules 100000 \
-            --min-sources 2
+            --min-rules 200000 \
+            --min-sources 1 \
+            --sensitive-min-sources 2 \
+            --sensitive-families "$families"
           python - "$RUNNER_TEMP/out/latest.json" <<'EOF' >> "$GITHUB_OUTPUT"
           import json, sys
           latest = json.load(open(sys.argv[1]))
@@ -110,14 +120,18 @@ jobs:
 
       - name: Test module compile chain
         working-directory: ${{ steps.resolve.outputs.tooling == 'module' && 'module' || '.' }}
+        # The module test stack is unittest-based (pytest is not installed on
+        # the runner and is no longer used by verify.yml), so run the same
+        # compile/provenance subset directly instead of failing on `pytest`.
         run: |
-          if [ ! -d tests ]; then
-            echo "tests/ not present in this repository; compile chain is covered by the module repo pipeline"
-            exit 0
-          fi
-          python -m pip install -q pytest
-          python -m pytest tests -q \
-            -k "compile_policy or compile_hotset or compile_ip_feed or cloud_generation or compile_rules or compile_hosts or hotset or policy"
+          python -m unittest \
+            tests.test_compile_policy \
+            tests.test_compile_hosts \
+            tests.test_compile_ip_feed \
+            tests.test_cloud_generation \
+            tests.test_compile_rules \
+            tests.test_hotset \
+            tests.test_build_rules
 
       - name: Compare with previous release
         id: compare

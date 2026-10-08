@@ -58,6 +58,34 @@ def allowed_domain(domain: str, allowlist: set[str]) -> bool:
     return any(".".join(labels[index:]) in allowlist for index in range(len(labels) - 1))
 
 
+def parse_families(text: str) -> tuple[str, ...]:
+    """Parse a sensitive-family token list: one lowercase substring per line."""
+    tokens: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip().lower()
+        if line:
+            tokens.add(line)
+    return tuple(sorted(tokens))
+
+
+def required_matches(
+    domain: str,
+    minimum: int,
+    sensitive_minimum: int,
+    families: tuple[str, ...],
+) -> int:
+    """Return how many providers must list ``domain`` for it to be kept.
+
+    Domains inside a curated false-positive-prone family require the higher
+    sensitive threshold; every other domain only needs the default minimum.
+    """
+    if sensitive_minimum > minimum and families:
+        for token in families:
+            if token in domain:
+                return sensitive_minimum
+    return minimum
+
+
 def _adblock_domain(token: str) -> str | None:
     token = token.strip()
     if not token.startswith("||"):
@@ -189,6 +217,8 @@ def compile_policy(
     max_rules: int = 2_500_000,
     stamp: str | None = None,
     min_sources: int = 1,
+    sensitive_min_sources: int | None = None,
+    sensitive_families: tuple[str, ...] = (),
 ) -> ProviderResult:
     endpoint_sources = endpoint_sources or []
     if endpoint_sources and endpoint_output is None:
@@ -196,6 +226,10 @@ def compile_policy(
     allow = parse_allowlist(allowlist.read_text(encoding="utf-8") if allowlist else "")
     if min_sources < 1 or min_sources > len(sources):
         raise ValueError("min_sources must be within the source count")
+    if sensitive_min_sources is None:
+        sensitive_min_sources = min_sources
+    if sensitive_min_sources < min_sources or sensitive_min_sources > len(sources):
+        raise ValueError("sensitive_min_sources must be within the source count")
     domains: set[str] = set()
     unsupported = 0
     source_digests: list[tuple[str, str]] = []
@@ -207,12 +241,16 @@ def compile_policy(
         source_domains.append(set(result.domains))
         unsupported += result.unsupported
         source_digests.append((source.name, hashlib.sha256(data.encode("utf-8")).hexdigest()))
-    if min_sources > 1:
+    if min_sources > 1 or sensitive_min_sources > min_sources:
         counts: dict[str, int] = {}
         for source_domains_set in source_domains:
             for domain in source_domains_set:
                 counts[domain] = counts.get(domain, 0) + 1
-        domains = {domain for domain, count in counts.items() if count >= min_sources}
+        domains = {
+            domain
+            for domain, count in counts.items()
+            if count >= required_matches(domain, min_sources, sensitive_min_sources, sensitive_families)
+        }
     if not min_rules <= len(domains) <= max_rules:
         raise ValueError(f"refusing suspicious ruleset with {len(domains)} entries")
     endpoint_lines: tuple[str, ...] = ()
@@ -239,6 +277,10 @@ def compile_policy(
         f"compiled_at={stamp}",
         f"unsupported_rule_count={unsupported}",
         f"min_provider_matches={min_sources}",
+        f"sensitive_min_provider_matches={sensitive_min_sources}",
+        f"sensitive_family_count={len(sensitive_families)}",
+        "sensitive_families_sha256="
+        + hashlib.sha256("\n".join(sensitive_families).encode("utf-8")).hexdigest(),
         f"endpoint_count={len(endpoint_lines)}",
         "sources=" + ",".join(name for name, _ in source_digests),
     ]
@@ -278,7 +320,14 @@ def main() -> int:
     parser.add_argument("--min-rules", type=int, default=1)
     parser.add_argument("--max-rules", type=int, default=2_500_000)
     parser.add_argument("--min-sources", type=int, default=1)
+    parser.add_argument("--sensitive-min-sources", type=int)
+    parser.add_argument("--sensitive-families", type=Path)
     args = parser.parse_args()
+    families = (
+        parse_families(args.sensitive_families.read_text(encoding="utf-8"))
+        if args.sensitive_families
+        else ()
+    )
     result = compile_policy(
         args.source,
         args.output,
@@ -290,6 +339,8 @@ def main() -> int:
         args.min_rules,
         args.max_rules,
         min_sources=args.min_sources,
+        sensitive_min_sources=args.sensitive_min_sources,
+        sensitive_families=families,
     )
     print(f"compiled rules={len(result.domains)} unsupported={result.unsupported} endpoints={len(result.endpoint_lines)}")
     return 0

@@ -1,0 +1,84 @@
+# False-positive-prone hostname families, one lowercase substring token per
+# line. Comments start with '#'.
+#
+# These are ad-monetised vendor ecosystems whose *functional* hosts (login,
+# push, HTTPDNS, CDN, mini-program assets, camera/cloud, store, telemetry of
+# the vendor itself) have repeatedly been mis-listed by single providers and
+# then blocked, breaking real functionality on device.
+#
+# A hostname containing any token below must be listed by at least
+# SENSITIVE_MIN_PROVIDER_MATCHES providers before it enters the ruleset;
+# every other hostname only needs MIN_PROVIDER_MATCHES. The compiled rules are
+# therefore the union of all providers, with this list acting as the only
+# place where extra source agreement is required.
+#
+# Keep tokens specific enough not to collide with unrelated registrations
+# (e.g. ".mob.com" does not match "admob.com").
+
+# ByteDance / Douyin / TikTok / Pangle.
+bytedance
+zijieapi
+snssdk
+toutiao
+pangolin
+tiktok
+ttwstatic
+isnssdk
+pglstatp
+sgsnssdk
+byteoversea
+
+# Tencent / WeChat / QQ / QQ Browser / MSDK.
+weixin
+wxs.qq
+weixinbridge
+wtlogin
+tencent
+msdk.qq
+reader.qq.com
+imtt.qq.com
+
+# Huawei / HMS / Smart Life.
+huawei
+hicloud
+hispace
+
+# Xiaomi / MIUI / Mi Cloud.
+xiaomi
+micloud
+miui
+pandora
+mistat
+
+# OPPO / Oplus / HeyTap / ColorOS.
+oppomobile
+heytap
+coloros
+
+# Kugou service CDN.
+kugou
+
+# NetEase / 163 game and risk-control.
+netease
+163.com
+dun.163
+
+# Login / risk-control SDK vendors.
+jiguang
+geetest
+.mob.com
+fengkongcloud
+tongdun
+aliyuncs
+
+# Analytics SDKs commonly embedded in functional flows.
+umeng
+cnzz
+growingio
+sensorsdata
+bugly
+appsflyer
+
+# Individual functional hosts mis-listed as ads.
+yingxiong
+123pan

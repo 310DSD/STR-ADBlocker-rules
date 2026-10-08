@@ -25,11 +25,11 @@ import urllib.request
 from pathlib import Path
 
 try:
-    from .compile_policy import compile_policy
+    from .compile_policy import compile_policy, parse_families
     from .compile_hotset import compile_hotset
     from .compile_ip_feed import parse_networks, render as render_endpoints
 except ImportError:  # Script execution from tools/ keeps the original CLI.
-    from compile_policy import compile_policy
+    from compile_policy import compile_policy, parse_families
     from compile_hotset import compile_hotset
     from compile_ip_feed import parse_networks, render as render_endpoints
 
@@ -192,7 +192,14 @@ def build_cloud_generation(
     min_rules: int = 300_000,
     max_rules: int = 2_500_000,
     min_sources: int = 1,
+    sensitive_min_sources: int = 2,
+    sensitive_families: Path | None = None,
 ) -> dict[str, object]:
+    families = (
+        parse_families(sensitive_families.read_text(encoding="utf-8"))
+        if sensitive_families
+        else ()
+    )
     if not sources:
         sources = [parse_source(item) for item in DEFAULT_SOURCES]
     labels = [name for name, _ in sources]
@@ -246,6 +253,8 @@ def build_cloud_generation(
         min_rules=min_rules,
         max_rules=max_rules,
         min_sources=min_sources,
+        sensitive_min_sources=sensitive_min_sources,
+        sensitive_families=families,
     )
     hotset_domains = compile_hotset(
         source_paths,
@@ -256,6 +265,8 @@ def build_cloud_generation(
         stamp=stamp,
         allowlist=allowlist,
         min_sources=min_sources,
+        sensitive_min_sources=sensitive_min_sources,
+        sensitive_families=families,
     )
     (gen / "hotset.domains").write_text(
         "".join(f"{domain}\n" for domain in hotset_domains), encoding="ascii", newline=""
@@ -296,6 +307,9 @@ def build_cloud_generation(
         "provider_sha256": manifest.get("provider_sha256", ""),
         "archive_sha256": archive_digest,
         "endpoint_source": endpoint_raw_url,
+        "min_sources": min_sources,
+        "sensitive_min_sources": sensitive_min_sources,
+        "sensitive_family_count": len(families),
         "sources": source_digests,
     }
     (output / "latest.json").write_text(json.dumps(latest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -318,6 +332,8 @@ def main() -> int:
     parser.add_argument("--min-rules", type=int, default=300_000)
     parser.add_argument("--max-rules", type=int, default=2_500_000)
     parser.add_argument("--min-sources", type=int, default=1)
+    parser.add_argument("--sensitive-min-sources", type=int, default=2)
+    parser.add_argument("--sensitive-families", type=Path)
     args = parser.parse_args()
     build_cloud_generation(
         args.work,
@@ -329,6 +345,8 @@ def main() -> int:
         args.min_rules,
         args.max_rules,
         args.min_sources,
+        args.sensitive_min_sources,
+        args.sensitive_families,
     )
     return 0
 
