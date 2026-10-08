@@ -57,6 +57,11 @@ DEFAULT_ENDPOINT_RAW = (
     "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Advertising/Advertising.list"
 )
 
+# Bumped when the signed generation layout changes; the publish workflow uses
+# it together with provider_sha256 so a format change is republished even when
+# the upstream sources are unchanged.
+GENERATION_FORMAT = 2
+
 GENERATION_FILES = (
     "endpoints.txt",
     "generation.sig",
@@ -270,6 +275,7 @@ def build_cloud_generation(
     latest = {
         "token": stamp,
         "published_at": stamp,
+        "generation_format": GENERATION_FORMAT,
         "rules": len(policy.domains),
         "unsupported": policy.unsupported,
         "endpoints": len(policy.endpoint_lines),

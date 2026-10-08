@@ -114,7 +114,7 @@ jobs:
           python - "$RUNNER_TEMP/out/latest.json" <<'EOF' >> "$GITHUB_OUTPUT"
           import json, sys
           latest = json.load(open(sys.argv[1]))
-          for key in ("token", "provider_sha256", "rules", "hotset", "endpoints", "archive_sha256"):
+          for key in ("token", "provider_sha256", "generation_format", "rules", "endpoints", "archive_sha256"):
               print(f"{key}={latest[key]}")
           EOF
 
@@ -134,7 +134,6 @@ jobs:
             tests.test_compile_ip_feed \
             tests.test_cloud_generation \
             tests.test_compile_rules \
-            tests.test_hotset \
             tests.test_build_rules
 
       - name: Compare with previous release
@@ -148,7 +147,9 @@ jobs:
           set -e
           if [ "$curl_status" -eq 0 ]; then
             prev_provider=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('provider_sha256',''))")
-            if [ -n "$prev_provider" ] && [ "$prev_provider" = "${{ steps.build.outputs.provider_sha256 }}" ]; then
+            prev_format=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('generation_format',1))")
+            if [ -n "$prev_provider" ] && [ "$prev_provider" = "${{ steps.build.outputs.provider_sha256 }}" ] && \
+                [ "$prev_format" = "${{ steps.build.outputs.generation_format }}" ]; then
               echo "unchanged=true" >> "$GITHUB_OUTPUT"
             fi
           fi
@@ -161,7 +162,6 @@ jobs:
           token="${{ steps.build.outputs.token }}"
           notes="Ruleset $token
           - rules=${{ steps.build.outputs.rules }}
-          - hotset=${{ steps.build.outputs.hotset }}
           - endpoints=${{ steps.build.outputs.endpoints }}
           - provider_sha256=${{ steps.build.outputs.provider_sha256 }}
           - archive_sha256=${{ steps.build.outputs.archive_sha256 }}"
