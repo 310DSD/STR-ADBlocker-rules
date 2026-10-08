@@ -2,9 +2,9 @@
 """Build a validated, publishable cloud rules generation from provider sources.
 
 This module only orchestrates: it downloads the provider sources, reuses the
-production compilers (compile_policy, compile_hotset, compile_ip_feed),
-validates the result, and packages an immutable generation tarball plus
-latest.json. It never changes the binary format or endpoint semantics.
+production compilers (compile_policy, compile_ip_feed), validates the result,
+and packages an immutable generation tarball plus latest.json. It never changes
+the binary format or endpoint semantics.
 """
 
 from __future__ import annotations
@@ -26,11 +26,9 @@ from pathlib import Path
 
 try:
     from .compile_policy import compile_policy, parse_families
-    from .compile_hotset import compile_hotset
     from .compile_ip_feed import parse_networks, render as render_endpoints
 except ImportError:  # Script execution from tools/ keeps the original CLI.
     from compile_policy import compile_policy, parse_families
-    from compile_hotset import compile_hotset
     from compile_ip_feed import parse_networks, render as render_endpoints
 
 SOURCE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -62,9 +60,6 @@ DEFAULT_ENDPOINT_RAW = (
 GENERATION_FILES = (
     "endpoints.txt",
     "generation.sig",
-    "hotset.domains",
-    "hotset.hosts",
-    "hotset.manifest",
     "manifest",
     "rules.bin",
 )
@@ -256,39 +251,17 @@ def build_cloud_generation(
         sensitive_min_sources=sensitive_min_sources,
         sensitive_families=families,
     )
-    hotset_domains = compile_hotset(
-        source_paths,
-        labels,
-        gen / "hotset.hosts",
-        gen / "hotset.manifest",
-        stamp,
-        stamp=stamp,
-        allowlist=allowlist,
-        min_sources=min_sources,
-        sensitive_min_sources=sensitive_min_sources,
-        sensitive_families=families,
-    )
-    (gen / "hotset.domains").write_text(
-        "".join(f"{domain}\n" for domain in hotset_domains), encoding="ascii", newline=""
-    )
-
     manifest = read_manifest(gen / "manifest")
-    hotset_manifest = read_manifest(gen / "hotset.manifest")
     rules_digest = sha256_bytes((gen / "rules.bin").read_bytes())
-    hotset_digest = sha256_bytes((gen / "hotset.hosts").read_bytes())
     endpoint_digest = sha256_bytes((gen / "endpoints.txt").read_bytes()) if endpoint_sources else ""
     if manifest.get("sha256") != rules_digest:
         raise ValueError("rules digest validation failed")
-    if hotset_manifest.get("sha256") != hotset_digest:
-        raise ValueError("hotset digest validation failed")
     if endpoint_sources and manifest.get("endpoint_sha256") != endpoint_digest:
         raise ValueError("endpoint digest validation failed")
     if not re.fullmatch(r"[0-9a-f]{64}", manifest.get("provider_sha256", "")):
         raise ValueError("provider digest validation failed")
     if int(manifest.get("rules", "0")) != len(policy.domains):
         raise ValueError("rules count mismatch")
-    if int(hotset_manifest.get("hotset", "0")) != len(hotset_domains):
-        raise ValueError("hotset count mismatch")
 
     signing_key = os.environ.get("STR_GENERATION_SIGNING_KEY")
     if signing_key:
@@ -299,10 +272,8 @@ def build_cloud_generation(
         "published_at": stamp,
         "rules": len(policy.domains),
         "unsupported": policy.unsupported,
-        "hotset": len(hotset_domains),
         "endpoints": len(policy.endpoint_lines),
         "rules_sha256": rules_digest,
-        "hotset_sha256": hotset_digest,
         "endpoint_sha256": endpoint_digest,
         "provider_sha256": manifest.get("provider_sha256", ""),
         "archive_sha256": archive_digest,
@@ -315,7 +286,7 @@ def build_cloud_generation(
     (output / "latest.json").write_text(json.dumps(latest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(
         f"built token={stamp} rules={latest['rules']} unsupported={latest['unsupported']} "
-        f"hotset={latest['hotset']} endpoints={latest['endpoints']} archive={archive_digest}"
+        f"endpoints={latest['endpoints']} archive={archive_digest}"
     )
     return latest
 
