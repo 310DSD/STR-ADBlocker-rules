@@ -24,7 +24,7 @@ except ImportError:  # Script execution from tools/ keeps the original CLI.
     from compile_hosts import normalize_domain, parse_allowlist
     from compile_rules import compile_rules
 
-COMPILER_VERSION = "str-f2-policy-2"
+COMPILER_VERSION = "str-f2-policy-3"
 MAX_DOMAIN_BYTES = 253
 ENDPOINT_RE = re.compile(r"^(?P<address>[^,\s]+)[,\s]+(?P<protocol>\d+)[,\s]+(?P<port>\d+)[,\s]+(?P<action>observe|allow|block)[,\s]+(?P<confidence>unknown|observed|correlated|audited)[,\s]+(?P<source>unknown|provider|dns|tls|quic|companion)[,\s]+(?P<policy>\d+)[,\s]+(?P<ttl>\d+)(?:[,\s]+active)?$", re.I)
 SOURCE_URLS = {
@@ -84,6 +84,86 @@ def required_matches(
             if token in domain:
                 return sensitive_minimum
     return minimum
+
+
+CATEGORY_UNKNOWN = 0
+CATEGORY_AD = 1
+CATEGORY_TRACKER = 2
+CATEGORY_TELEMETRY = 3
+CATEGORY_FUNCTIONAL = 4
+
+CATEGORY_NAMES = {
+    "unknown": CATEGORY_UNKNOWN,
+    "ad": CATEGORY_AD,
+    "tracker": CATEGORY_TRACKER,
+    "telemetry": CATEGORY_TELEMETRY,
+    "functional": CATEGORY_FUNCTIONAL,
+}
+
+
+def parse_category_rules(text: str) -> tuple[tuple[str, int], ...]:
+    """Parse "<category> <label-token>" lines, longest token first."""
+    rules: list[tuple[str, int]] = []
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip().lower()
+        if not line:
+            continue
+        fields = line.split(None, 1)
+        if len(fields) != 2:
+            continue
+        category = CATEGORY_NAMES.get(fields[0])
+        token = fields[1].strip()
+        if category is None or not token:
+            continue
+        rules.append((token, category))
+    rules.sort(key=lambda item: (-len(item[0]), item[0]))
+    return tuple(rules)
+
+
+def _label_matches(label: str, token: str) -> bool:
+    if label == token:
+        return True
+    if label.startswith(token + "-"):
+        return True
+    return label.startswith(token) and label[len(token):].isdigit()
+
+
+def _confidence(provider_count: int, explicit: bool) -> int:
+    if provider_count >= 5:
+        base = 12
+    elif provider_count == 4:
+        base = 10
+    elif provider_count == 3:
+        base = 8
+    elif provider_count == 2:
+        base = 6
+    else:
+        base = 4
+    if explicit:
+        base += 2
+    return min(15, base)
+
+
+def classify_domain(
+    domain: str,
+    provider_count: int,
+    family_tokens: tuple[str, ...],
+    category_rules: tuple[tuple[str, int], ...],
+) -> tuple[int, int]:
+    """Return (category, confidence) for one hostname.
+
+    Explicit label tokens win; curated sensitive families then default to
+    telemetry; everything else stays unknown so it keeps kernel enforcement.
+    """
+    labels = domain.split(".")
+    for token, category in category_rules:
+        for label in labels:
+            if _label_matches(label, token):
+                return category, _confidence(provider_count, explicit=True)
+    for token in family_tokens:
+        if token in domain:
+            return CATEGORY_TELEMETRY, _confidence(provider_count, explicit=False)
+    return CATEGORY_UNKNOWN, _confidence(provider_count, explicit=False)
 
 
 def _adblock_domain(token: str) -> str | None:
@@ -219,6 +299,8 @@ def compile_policy(
     min_sources: int = 1,
     sensitive_min_sources: int | None = None,
     sensitive_families: tuple[str, ...] = (),
+    category_rules: tuple[tuple[str, int], ...] = (),
+    category_output: Path | None = None,
 ) -> ProviderResult:
     endpoint_sources = endpoint_sources or []
     if endpoint_sources and endpoint_output is None:
@@ -241,11 +323,11 @@ def compile_policy(
         source_domains.append(set(result.domains))
         unsupported += result.unsupported
         source_digests.append((source.name, hashlib.sha256(data.encode("utf-8")).hexdigest()))
+    counts: dict[str, int] = {}
+    for source_domains_set in source_domains:
+        for domain in source_domains_set:
+            counts[domain] = counts.get(domain, 0) + 1
     if min_sources > 1 or sensitive_min_sources > min_sources:
-        counts: dict[str, int] = {}
-        for source_domains_set in source_domains:
-            for domain in source_domains_set:
-                counts[domain] = counts.get(domain, 0) + 1
         domains = {
             domain
             for domain, count in counts.items()
@@ -253,12 +335,26 @@ def compile_policy(
         }
     if not min_rules <= len(domains) <= max_rules:
         raise ValueError(f"refusing suspicious ruleset with {len(domains)} entries")
+    ordered = sorted(domains)
+    category_bytes = bytearray()
+    if category_rules:
+        for domain in ordered:
+            category, confidence = classify_domain(
+                domain, counts.get(domain, 1), sensitive_families, category_rules
+            )
+            category_bytes.append(category)
+            category_bytes.append(confidence)
+        if len(category_bytes) != len(ordered) * 2:
+            raise ValueError("category sidecar length mismatch")
+        category_path = category_output or output.with_name("categories.bin")
+        category_path.parent.mkdir(parents=True, exist_ok=True)
+        category_path.write_bytes(bytes(category_bytes))
     endpoint_lines: tuple[str, ...] = ()
     for source in endpoint_sources:
         endpoint_lines += parse_endpoint(source.read_text(encoding="utf-8"))
     endpoint_lines = tuple(sorted(set(endpoint_lines)))
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(compile_rules(sorted(domains)))
+    output.write_bytes(compile_rules(ordered))
     if endpoint_output:
         endpoint_output.parent.mkdir(parents=True, exist_ok=True)
         endpoint_output.write_text(
@@ -288,6 +384,15 @@ def compile_policy(
         # Bind endpoint bytes to the same manifest as rules.bin. Compiler
         # generations must pass the daemon's digest validation before publish.
         lines.append(f"endpoint_sha256={hashlib.sha256(endpoint_output.read_bytes()).hexdigest()}")
+    if category_rules:
+        lines.extend(
+            (
+                "category_format=1",
+                f"category_count={len(ordered)}",
+                f"category_sha256={hashlib.sha256(bytes(category_bytes)).hexdigest()}",
+            )
+        )
+    lines.append("agent_min=1.2.0")
     for name, source_digest in source_digests:
         lines.append(f"source_{name}_sha256={source_digest}")
         if name in SOURCE_URLS:
@@ -322,10 +427,17 @@ def main() -> int:
     parser.add_argument("--min-sources", type=int, default=1)
     parser.add_argument("--sensitive-min-sources", type=int)
     parser.add_argument("--sensitive-families", type=Path)
+    parser.add_argument("--category-rules", type=Path)
+    parser.add_argument("--category-output", type=Path)
     args = parser.parse_args()
     families = (
         parse_families(args.sensitive_families.read_text(encoding="utf-8"))
         if args.sensitive_families
+        else ()
+    )
+    categories = (
+        parse_category_rules(args.category_rules.read_text(encoding="utf-8"))
+        if args.category_rules
         else ()
     )
     result = compile_policy(
@@ -341,6 +453,8 @@ def main() -> int:
         min_sources=args.min_sources,
         sensitive_min_sources=args.sensitive_min_sources,
         sensitive_families=families,
+        category_rules=categories,
+        category_output=args.category_output,
     )
     print(f"compiled rules={len(result.domains)} unsupported={result.unsupported} endpoints={len(result.endpoint_lines)}")
     return 0

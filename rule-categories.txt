@@ -1,0 +1,75 @@
+# Rule category tokens. Format: "<category> <token>".
+#
+# A token matches a DNS label when the label equals the token, starts with
+# "<token>-", or is "<token>" followed only by digits (for example "ads3").
+# Matching is case-insensitive and applies to every label of the hostname.
+#
+# Categories:
+#   ad        1  kernel-enforced everywhere (DNS + connection), not per-app
+#   tracker   2  userspace-enforced at connection layer, per-app profile
+#   telemetry 3  userspace-enforced at connection layer, per-app profile
+#   functional 4 never blocked (diagnostic only; should be allowlisted)
+#
+# Anything unmatched stays "unknown" (0) and is treated like "ad" for kernel
+# enforcement, so a missing classification never weakens blocking.
+
+# --- ad networks / ad servers ---
+ad doubleclick
+ad googlesyndication
+ad googleadservices
+ad adservice
+ad adcolony
+ad applovin
+ad unityads
+ad vungle
+ad chartboost
+ad ironsource
+ad mintegral
+ad pangle
+ad pangolin
+ad inmobi
+ad tapjoy
+ad adnxs
+ad ads
+ad adx
+ad advert
+ad adserver
+ad adclick
+ad sponsor
+ad promoted
+ad banner
+
+# --- trackers / analytics ---
+tracker analytics
+tracker track
+tracker tracking
+tracker tracker
+tracker metrics
+tracker stat
+tracker stats
+tracker beacon
+tracker collect
+tracker pixel
+tracker measure
+tracker attribution
+tracker telemetry
+tracker log
+tracker logs
+
+# --- vendor telemetry / crash / attribution SDKs ---
+telemetry bugly
+telemetry sentry
+telemetry appsflyer
+telemetry appsflyersdk
+telemetry adjust
+telemetry branch
+telemetry umeng
+telemetry umengcloud
+telemetry cnzz
+telemetry growingio
+telemetry sensorsdata
+telemetry crashlytics
+telemetry firebase
+telemetry newrelic
+telemetry datadog
+telemetry instabug

@@ -25,10 +25,10 @@ import urllib.request
 from pathlib import Path
 
 try:
-    from .compile_policy import compile_policy, parse_families
+    from .compile_policy import compile_policy, parse_category_rules, parse_families
     from .compile_ip_feed import parse_networks, render as render_endpoints
 except ImportError:  # Script execution from tools/ keeps the original CLI.
-    from compile_policy import compile_policy, parse_families
+    from compile_policy import compile_policy, parse_category_rules, parse_families
     from compile_ip_feed import parse_networks, render as render_endpoints
 
 SOURCE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -60,9 +60,10 @@ DEFAULT_ENDPOINT_RAW = (
 # Bumped when the signed generation layout changes; the publish workflow uses
 # it together with provider_sha256 so a format change is republished even when
 # the upstream sources are unchanged.
-GENERATION_FORMAT = 2
+GENERATION_FORMAT = 3
 
 GENERATION_FILES = (
+    "categories.bin",
     "endpoints.txt",
     "generation.sig",
     "manifest",
@@ -194,10 +195,17 @@ def build_cloud_generation(
     min_sources: int = 1,
     sensitive_min_sources: int = 2,
     sensitive_families: Path | None = None,
+    category_rules: Path | None = None,
+    agent_min: str = "1.2.0",
 ) -> dict[str, object]:
     families = (
         parse_families(sensitive_families.read_text(encoding="utf-8"))
         if sensitive_families
+        else ()
+    )
+    categories = (
+        parse_category_rules(category_rules.read_text(encoding="utf-8"))
+        if category_rules
         else ()
     )
     if not sources:
@@ -255,14 +263,24 @@ def build_cloud_generation(
         min_sources=min_sources,
         sensitive_min_sources=sensitive_min_sources,
         sensitive_families=families,
+        category_rules=categories,
+        category_output=gen / "categories.bin" if categories else None,
     )
     manifest = read_manifest(gen / "manifest")
     rules_digest = sha256_bytes((gen / "rules.bin").read_bytes())
     endpoint_digest = sha256_bytes((gen / "endpoints.txt").read_bytes()) if endpoint_sources else ""
+    category_digest = sha256_bytes((gen / "categories.bin").read_bytes()) if categories else ""
     if manifest.get("sha256") != rules_digest:
         raise ValueError("rules digest validation failed")
     if endpoint_sources and manifest.get("endpoint_sha256") != endpoint_digest:
         raise ValueError("endpoint digest validation failed")
+    if categories:
+        if manifest.get("category_sha256") != category_digest:
+            raise ValueError("category digest validation failed")
+        if int(manifest.get("category_count", "0")) != len(policy.domains):
+            raise ValueError("category count mismatch")
+        if manifest.get("agent_min") != agent_min:
+            raise ValueError("agent_min mismatch")
     if not re.fullmatch(r"[0-9a-f]{64}", manifest.get("provider_sha256", "")):
         raise ValueError("provider digest validation failed")
     if int(manifest.get("rules", "0")) != len(policy.domains):
@@ -281,6 +299,9 @@ def build_cloud_generation(
         "endpoints": len(policy.endpoint_lines),
         "rules_sha256": rules_digest,
         "endpoint_sha256": endpoint_digest,
+        "category_sha256": category_digest,
+        "category_count": len(policy.domains),
+        "agent_min": agent_min,
         "provider_sha256": manifest.get("provider_sha256", ""),
         "archive_sha256": archive_digest,
         "endpoint_source": endpoint_raw_url,
@@ -311,6 +332,8 @@ def main() -> int:
     parser.add_argument("--min-sources", type=int, default=1)
     parser.add_argument("--sensitive-min-sources", type=int, default=2)
     parser.add_argument("--sensitive-families", type=Path)
+    parser.add_argument("--category-rules", type=Path)
+    parser.add_argument("--agent-min", default="1.2.0")
     args = parser.parse_args()
     build_cloud_generation(
         args.work,
@@ -324,6 +347,8 @@ def main() -> int:
         args.min_sources,
         args.sensitive_min_sources,
         args.sensitive_families,
+        args.category_rules,
+        args.agent_min,
     )
     return 0
 

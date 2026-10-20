@@ -94,6 +94,14 @@ jobs:
             families="$GITHUB_WORKSPACE/config/sensitive-families.txt"
           fi
           test -s "$families" || { echo "sensitive family list is missing: $families" >&2; exit 1; }
+          if [ "${{ steps.resolve.outputs.tooling }}" = "module" ]; then
+            categories="$GITHUB_WORKSPACE/module/config/rule-categories.txt"
+          elif [ -f "$GITHUB_WORKSPACE/rule-categories.txt" ]; then
+            categories="$GITHUB_WORKSPACE/rule-categories.txt"
+          else
+            categories="$GITHUB_WORKSPACE/config/rule-categories.txt"
+          fi
+          test -s "$categories" || { echo "rule category list is missing: $categories" >&2; exit 1; }
           python tools/build_cloud_generation.py \
             --work "$RUNNER_TEMP/work" \
             --out "$RUNNER_TEMP/out" \
@@ -110,7 +118,8 @@ jobs:
             --min-rules 200000 \
             --min-sources 1 \
             --sensitive-min-sources 2 \
-            --sensitive-families "$families"
+            --sensitive-families "$families" \
+            --category-rules "$categories"
           python - "$RUNNER_TEMP/out/latest.json" <<'EOF' >> "$GITHUB_OUTPUT"
           import json, sys
           latest = json.load(open(sys.argv[1]))
