@@ -123,9 +123,15 @@ def parse_category_rules(text: str) -> tuple[tuple[str, int], ...]:
 def _label_matches(label: str, token: str) -> bool:
     if label == token:
         return True
-    if label.startswith(token + "-"):
+    if not label.startswith(token):
+        return False
+    rest = label[len(token):]
+    if rest.startswith("-"):
         return True
-    return label.startswith(token) and label[len(token):].isdigit()
+    digits = 0
+    while digits < len(rest) and rest[digits].isdigit():
+        digits += 1
+    return digits > 0 and (digits == len(rest) or rest[digits] == "-")
 
 
 def _confidence(provider_count: int, explicit: bool) -> int:

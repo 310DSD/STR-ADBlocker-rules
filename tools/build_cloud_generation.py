@@ -208,6 +208,7 @@ def build_cloud_generation(
         if category_rules
         else ()
     )
+    generation_format = 3 if categories else 2
     if not sources:
         sources = [parse_source(item) for item in DEFAULT_SOURCES]
     labels = [name for name, _ in sources]
@@ -293,14 +294,14 @@ def build_cloud_generation(
     latest = {
         "token": stamp,
         "published_at": stamp,
-        "generation_format": GENERATION_FORMAT,
+        "generation_format": generation_format,
         "rules": len(policy.domains),
         "unsupported": policy.unsupported,
         "endpoints": len(policy.endpoint_lines),
         "rules_sha256": rules_digest,
         "endpoint_sha256": endpoint_digest,
         "category_sha256": category_digest,
-        "category_count": len(policy.domains),
+        "category_count": len(policy.domains) if categories else 0,
         "agent_min": agent_min,
         "provider_sha256": manifest.get("provider_sha256", ""),
         "archive_sha256": archive_digest,
