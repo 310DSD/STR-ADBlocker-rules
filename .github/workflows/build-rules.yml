@@ -138,8 +138,8 @@ jobs:
           python - "$RUNNER_TEMP/out/latest.json" <<'EOF' >> "$GITHUB_OUTPUT"
           import json, sys
           latest = json.load(open(sys.argv[1]))
-          for key in ("token", "provider_sha256", "generation_format", "rules", "endpoints", "archive_sha256"):
-              print(f"{key}={latest[key]}")
+          for key in ("token", "provider_sha256", "generation_format", "rules", "endpoints", "archive_sha256", "normal_domains_sha256", "quality_filter", "quality_normal_limit", "quality_single_unknown_sources"):
+              print(f"{key}={latest.get(key, '')}")
           EOF
 
       - name: Test module compile chain
@@ -172,8 +172,16 @@ jobs:
           if [ "$curl_status" -eq 0 ]; then
             prev_provider=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('provider_sha256',''))")
             prev_format=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('generation_format',1))")
+            prev_normal=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('normal_domains_sha256',''))")
+            prev_quality=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('quality_filter',''))")
+            prev_limit=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('quality_normal_limit',0))")
+            prev_sources=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('quality_single_unknown_sources',''))")
             if [ -n "$prev_provider" ] && [ "$prev_provider" = "${{ steps.build.outputs.provider_sha256 }}" ] && \
-                [ "$prev_format" = "${{ steps.build.outputs.generation_format }}" ]; then
+                [ "$prev_format" = "${{ steps.build.outputs.generation_format }}" ] && \
+                [ "$prev_normal" = "${{ steps.build.outputs.normal_domains_sha256 }}" ] && \
+                [ "$prev_quality" = "${{ steps.build.outputs.quality_filter }}" ] && \
+                [ "$prev_limit" = "${{ steps.build.outputs.quality_normal_limit }}" ] && \
+                [ "$prev_sources" = "${{ steps.build.outputs.quality_single_unknown_sources }}" ]; then
               echo "unchanged=true" >> "$GITHUB_OUTPUT"
             fi
           fi
