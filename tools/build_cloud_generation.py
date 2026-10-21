@@ -196,6 +196,9 @@ def build_cloud_generation(
     sensitive_min_sources: int = 2,
     sensitive_families: Path | None = None,
     category_rules: Path | None = None,
+    normal_domains: Path | None = None,
+    normal_domains_limit: int = 100_000,
+    single_unknown_sources: tuple[str, ...] = (),
     agent_min: str = "1.2.0",
 ) -> dict[str, object]:
     families = (
@@ -266,6 +269,9 @@ def build_cloud_generation(
         sensitive_families=families,
         category_rules=categories,
         category_output=gen / "categories.bin" if categories else None,
+        normal_domains=normal_domains,
+        normal_domains_limit=normal_domains_limit,
+        single_unknown_sources=single_unknown_sources,
     )
     manifest = read_manifest(gen / "manifest")
     rules_digest = sha256_bytes((gen / "rules.bin").read_bytes())
@@ -309,6 +315,11 @@ def build_cloud_generation(
         "min_sources": min_sources,
         "sensitive_min_sources": sensitive_min_sources,
         "sensitive_family_count": len(families),
+        "quality_filter": manifest.get("quality_filter", ""),
+        "quality_normal_limit": int(manifest.get("quality_normal_limit", "0")),
+        "quality_dropped": int(manifest.get("quality_dropped_count", "0")),
+        "normal_domains_sha256": manifest.get("quality_normal_sha256", ""),
+        "quality_single_unknown_sources": manifest.get("quality_single_unknown_sources", ""),
         "sources": source_digests,
     }
     (output / "latest.json").write_text(json.dumps(latest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -334,6 +345,9 @@ def main() -> int:
     parser.add_argument("--sensitive-min-sources", type=int, default=2)
     parser.add_argument("--sensitive-families", type=Path)
     parser.add_argument("--category-rules", type=Path)
+    parser.add_argument("--normal-domains", type=Path)
+    parser.add_argument("--normal-domains-limit", type=int, default=100_000)
+    parser.add_argument("--single-unknown-source", action="append", default=[])
     parser.add_argument("--agent-min", default="1.2.0")
     args = parser.parse_args()
     build_cloud_generation(
@@ -349,6 +363,9 @@ def main() -> int:
         args.sensitive_min_sources,
         args.sensitive_families,
         args.category_rules,
+        args.normal_domains,
+        args.normal_domains_limit,
+        tuple(args.single_unknown_source),
         args.agent_min,
     )
     return 0

@@ -45,7 +45,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve module tooling source
         id: resolve
@@ -62,15 +62,27 @@ jobs:
 
       - name: Checkout module tooling
         if: steps.resolve.outputs.tooling == 'module'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ steps.resolve.outputs.module_repo }}
           ref: ${{ steps.resolve.outputs.module_ref }}
           path: module
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+
+      - name: Fetch normal-domain popularity list
+        run: |
+          curl -fsSL --retry 3 --connect-timeout 30 --max-time 300 \
+            "https://tranco-list.eu/top-1m.csv.zip" \
+            -o "$RUNNER_TEMP/tranco-top-1m.zip"
+          python - "$RUNNER_TEMP/tranco-top-1m.zip" "$RUNNER_TEMP/top-1m.csv" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as archive:
+              data = archive.read("top-1m.csv")
+          open(sys.argv[2], "wb").write(data)
+          PY
 
       - name: Build generation
         id: build
@@ -119,7 +131,10 @@ jobs:
             --min-sources 1 \
             --sensitive-min-sources 2 \
             --sensitive-families "$families" \
-            --category-rules "$categories"
+            --category-rules "$categories" \
+            --normal-domains "$RUNNER_TEMP/top-1m.csv" \
+            --normal-domains-limit 100000 \
+            --single-unknown-source 1hosts-lite
           python - "$RUNNER_TEMP/out/latest.json" <<'EOF' >> "$GITHUB_OUTPUT"
           import json, sys
           latest = json.load(open(sys.argv[1]))

@@ -44,6 +44,7 @@ class ProviderResult:
     domains: tuple[str, ...]
     unsupported: int
     endpoint_lines: tuple[str, ...]
+    quality_dropped: int = 0
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,35 @@ def parse_families(text: str) -> tuple[str, ...]:
         if line:
             tokens.add(line)
     return tuple(sorted(tokens))
+
+
+def parse_normal_domains(text: str, limit: int = 100_000) -> set[str]:
+    """Parse a Tranco-style ``rank,domain`` list (or a plain domain list).
+
+    The list is a popularity signal, not an allowlist corpus. It is used only
+    to remove a single-provider, uncategorised host from the noisy long tail;
+    known ad/tracker/telemetry labels and multi-provider hosts remain blocked.
+    """
+    if limit < 1:
+        raise ValueError("normal domain limit must be positive")
+    domains: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        fields = line.split(",", 1)
+        if len(fields) == 2 and fields[0].strip().isdigit():
+            rank = int(fields[0].strip())
+            candidate = fields[1].strip()
+        else:
+            rank = 1
+            candidate = line
+        if rank > limit:
+            continue
+        domain = normalize_domain(candidate)
+        if domain:
+            domains.add(domain)
+    return domains
 
 
 def required_matches(
@@ -307,11 +337,20 @@ def compile_policy(
     sensitive_families: tuple[str, ...] = (),
     category_rules: tuple[tuple[str, int], ...] = (),
     category_output: Path | None = None,
+    normal_domains: Path | None = None,
+    normal_domains_limit: int = 100_000,
+    single_unknown_sources: tuple[str, ...] = (),
 ) -> ProviderResult:
     endpoint_sources = endpoint_sources or []
     if endpoint_sources and endpoint_output is None:
         raise ValueError("endpoint_output is required when endpoint sources are provided")
     allow = parse_allowlist(allowlist.read_text(encoding="utf-8") if allowlist else "")
+    normal_domain_data = normal_domains.read_bytes() if normal_domains else b""
+    normal = (
+        parse_normal_domains(normal_domain_data.decode("utf-8"), normal_domains_limit)
+        if normal_domains
+        else set()
+    )
     if min_sources < 1 or min_sources > len(sources):
         raise ValueError("min_sources must be within the source count")
     if sensitive_min_sources is None:
@@ -330,15 +369,42 @@ def compile_policy(
         unsupported += result.unsupported
         source_digests.append((source.name, hashlib.sha256(data.encode("utf-8")).hexdigest()))
     counts: dict[str, int] = {}
-    for source_domains_set in source_domains:
+    domain_sources: dict[str, set[str]] = {}
+    for source, source_domains_set in zip(sources, source_domains):
         for domain in source_domains_set:
             counts[domain] = counts.get(domain, 0) + 1
+            domain_sources.setdefault(domain, set()).add(source.name)
     if min_sources > 1 or sensitive_min_sources > min_sources:
         domains = {
             domain
             for domain, count in counts.items()
             if count >= required_matches(domain, min_sources, sensitive_min_sources, sensitive_families)
         }
+    categories_by_domain: dict[str, int] = {}
+    if category_rules:
+        for domain in domains:
+            category, _ = classify_domain(
+                domain, counts.get(domain, 1), sensitive_families, category_rules
+            )
+            categories_by_domain[domain] = category
+    quality_dropped = 0
+    if normal or single_unknown_sources:
+        kept: set[str] = set()
+        for domain in domains:
+            category = categories_by_domain.get(domain, CATEGORY_UNKNOWN)
+            if category != CATEGORY_UNKNOWN:
+                kept.add(domain)
+                continue
+            single_provider = counts.get(domain, 1) == 1
+            normal_hit = single_provider and domain in normal
+            noisy_source_hit = single_provider and any(
+                source in single_unknown_sources for source in domain_sources.get(domain, ())
+            )
+            if normal_hit or noisy_source_hit:
+                quality_dropped += 1
+                continue
+            kept.add(domain)
+        domains = kept
     if not min_rules <= len(domains) <= max_rules:
         raise ValueError(f"refusing suspicious ruleset with {len(domains)} entries")
     ordered = sorted(domains)
@@ -398,6 +464,17 @@ def compile_policy(
                 f"category_sha256={hashlib.sha256(bytes(category_bytes)).hexdigest()}",
             )
         )
+    if normal or single_unknown_sources:
+        lines.extend(
+            (
+                "quality_filter=popularity_unknown_single_provider",
+                f"quality_normal_limit={normal_domains_limit}",
+                f"quality_normal_count={len(normal)}",
+                f"quality_normal_sha256={hashlib.sha256(normal_domain_data).hexdigest()}",
+                "quality_single_unknown_sources=" + ",".join(single_unknown_sources),
+                f"quality_dropped_count={quality_dropped}",
+            )
+        )
     lines.append("agent_min=1.2.0")
     for name, source_digest in source_digests:
         lines.append(f"source_{name}_sha256={source_digest}")
@@ -416,7 +493,7 @@ def compile_policy(
     lines.append(f"provider_sha256={provider_digest}")
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text("\n".join(lines) + "\n", encoding="ascii", newline="\n")
-    return ProviderResult(tuple(sorted(domains)), unsupported, endpoint_lines)
+    return ProviderResult(tuple(sorted(domains)), unsupported, endpoint_lines, quality_dropped)
 
 
 def main() -> int:
@@ -435,6 +512,9 @@ def main() -> int:
     parser.add_argument("--sensitive-families", type=Path)
     parser.add_argument("--category-rules", type=Path)
     parser.add_argument("--category-output", type=Path)
+    parser.add_argument("--normal-domains", type=Path)
+    parser.add_argument("--normal-domains-limit", type=int, default=100_000)
+    parser.add_argument("--single-unknown-source", action="append", default=[])
     args = parser.parse_args()
     families = (
         parse_families(args.sensitive_families.read_text(encoding="utf-8"))
@@ -461,8 +541,11 @@ def main() -> int:
         sensitive_families=families,
         category_rules=categories,
         category_output=args.category_output,
+        normal_domains=args.normal_domains,
+        normal_domains_limit=args.normal_domains_limit,
+        single_unknown_sources=tuple(args.single_unknown_source),
     )
-    print(f"compiled rules={len(result.domains)} unsupported={result.unsupported} endpoints={len(result.endpoint_lines)}")
+    print(f"compiled rules={len(result.domains)} unsupported={result.unsupported} endpoints={len(result.endpoint_lines)} quality_dropped={result.quality_dropped}")
     return 0
 
 

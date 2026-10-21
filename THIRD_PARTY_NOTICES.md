@@ -17,6 +17,13 @@ STR AdBlocker extracts canonical domains, applies the allowlist, sorts and
 deduplicates them, and stores them in its mmap rule format. The ruleset manifest
 records the source URLs, build timestamp, count, and binary digest.
 
+The optional quality filter reads the Tranco top-1m list at rules-build time and
+does not redistribute it. Tranco is a research-oriented ranking of popular
+domains; see the project methodology and attribution requirements:
+
+- https://tranco-list.eu/
+- https://tranco-list.eu/methodology
+
 The optional coverage command reads d3ward's d3Host list from its upstream location
 at test time. It does not redistribute that list. The upstream declares it under
 CC BY-NC-SA:
