@@ -1,7 +1,7 @@
 # STR AdBlocker Rules
 
 STR AdBlocker 的云端规则构建仓库。GitHub Actions 每天 03:17 UTC 自动构建，也
-支持手动触发，把 8 个 provider 源的并集编译成 FlowGuard 生产 generation，
+支持手动触发，把 6 个 provider 源的并集编译成 FlowGuard 生产 generation，
 并以 GitHub Release 发布。当前采用 family-aware union：普通主机至少被 1 个
 provider 收录，敏感厂商家族要求至少 2 个 provider；在此之上叠加质量过滤：
 
@@ -39,7 +39,7 @@ digest 与 provider digest 后才原子发布，失败时保留旧 generation。
 - HaGeZi DNS Blocklists（multi）
 - anti-AD EasyList
 - 1Hosts Lite
-- AdGuard DNS / Base / Chinese
+- AdGuard DNS
 - BanAD
 - OISD（big）
 - Tranco top-1m（仅构建时作为正常域名流行度信号，不进入规则产物）

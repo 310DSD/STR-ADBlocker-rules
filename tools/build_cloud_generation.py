@@ -47,8 +47,6 @@ DEFAULT_SOURCES = (
     "antiad-easylist=https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-easylist.txt",
     "1hosts-lite=https://raw.githubusercontent.com/badmojr/1Hosts/master/Lite/domains.txt",
     "adguard-dns=https://filters.adtidy.org/extension/chromium/filters/15.txt",
-    "adguard-base=https://filters.adtidy.org/extension/chromium/filters/2.txt",
-    "adguard-chinese=https://filters.adtidy.org/extension/chromium/filters/224.txt",
     "banad=https://raw.githubusercontent.com/damengzhu/banad/main/jiekouAD.txt",
     "oisd-big=https://big.oisd.nl",
 )

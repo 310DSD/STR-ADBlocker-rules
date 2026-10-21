@@ -121,8 +121,6 @@ jobs:
             --source antiad-easylist=https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-easylist.txt \
             --source 1hosts-lite=https://raw.githubusercontent.com/badmojr/1Hosts/master/Lite/domains.txt \
             --source adguard-dns=https://filters.adtidy.org/extension/chromium/filters/15.txt \
-            --source adguard-base=https://filters.adtidy.org/extension/chromium/filters/2.txt \
-            --source adguard-chinese=https://filters.adtidy.org/extension/chromium/filters/224.txt \
             --source banad=https://raw.githubusercontent.com/damengzhu/banad/main/jiekouAD.txt \
             --source oisd-big=https://big.oisd.nl \
             --endpoint-raw-url "${ENDPOINT_RAW_URL:-https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Advertising/Advertising.list}" \
