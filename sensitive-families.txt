@@ -82,3 +82,7 @@ appsflyer
 # Individual functional hosts mis-listed as ads.
 yingxiong
 123pan
+
+# Huawei Browser / HUAWEI ID config bootstrap; anti-AD documents this as a
+# functionality-breaking host when blocked.
+dbankcloud.cn

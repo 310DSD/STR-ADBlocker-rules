@@ -1,6 +1,6 @@
 name: build-rules
 
-# Builds the production rules generation from the 8 provider sources on a
+# Builds the production rules generation from the 6 provider sources on a
 # schedule, publishes it as an immutable GitHub Release asset, and lets the
 # module pull it with `bin/update.sh cloud <url>`.
 #
@@ -44,6 +44,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
@@ -132,11 +133,13 @@ jobs:
             --category-rules "$categories" \
             --normal-domains "$RUNNER_TEMP/top-1m.csv" \
             --normal-domains-limit 100000 \
-            --single-unknown-source 1hosts-lite
+            --single-unknown-source 1hosts-lite \
+            --jobs 6 \
+            --quality-report "$RUNNER_TEMP/out/quality-report.json"
           python - "$RUNNER_TEMP/out/latest.json" <<'EOF' >> "$GITHUB_OUTPUT"
           import json, sys
           latest = json.load(open(sys.argv[1]))
-          for key in ("token", "provider_sha256", "generation_format", "rules", "endpoints", "archive_sha256", "normal_domains_sha256", "quality_filter", "quality_normal_limit", "quality_single_unknown_sources"):
+          for key in ("token", "provider_sha256", "generation_format", "rules", "rules_sha256", "endpoint_sha256", "category_sha256", "endpoints", "archive_sha256", "normal_domains_sha256", "quality_filter", "quality_normal_limit", "quality_dropped", "quality_single_unknown_sources"):
               print(f"{key}={latest.get(key, '')}")
           EOF
 
@@ -150,13 +153,17 @@ jobs:
             echo "tests/ is not present in this repository; the compile chain is covered by the module repository pipeline"
             exit 0
           fi
-          python -m unittest \
-            tests.test_compile_policy \
-            tests.test_compile_hosts \
-            tests.test_compile_ip_feed \
-            tests.test_cloud_generation \
-            tests.test_compile_rules \
-            tests.test_build_rules
+          if [ -f tests/test_rules_toolchain.py ]; then
+            python -m unittest tests.test_rules_toolchain
+          else
+            python -m unittest \
+              tests.test_compile_policy \
+              tests.test_compile_hosts \
+              tests.test_compile_ip_feed \
+              tests.test_cloud_generation \
+              tests.test_compile_rules \
+              tests.test_build_rules
+          fi
 
       - name: Compare with previous release
         id: compare
@@ -173,12 +180,18 @@ jobs:
             prev_normal=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('normal_domains_sha256',''))")
             prev_quality=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('quality_filter',''))")
             prev_limit=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('quality_normal_limit',0))")
+            prev_rules=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('rules_sha256',''))")
+            prev_endpoint=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('endpoint_sha256',''))")
+            prev_categories=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('category_sha256',''))")
             prev_sources=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/prev.json')).get('quality_single_unknown_sources',''))")
             if [ -n "$prev_provider" ] && [ "$prev_provider" = "${{ steps.build.outputs.provider_sha256 }}" ] && \
                 [ "$prev_format" = "${{ steps.build.outputs.generation_format }}" ] && \
                 [ "$prev_normal" = "${{ steps.build.outputs.normal_domains_sha256 }}" ] && \
                 [ "$prev_quality" = "${{ steps.build.outputs.quality_filter }}" ] && \
                 [ "$prev_limit" = "${{ steps.build.outputs.quality_normal_limit }}" ] && \
+                [ "$prev_rules" = "${{ steps.build.outputs.rules_sha256 }}" ] && \
+                [ "$prev_endpoint" = "${{ steps.build.outputs.endpoint_sha256 }}" ] && \
+                [ "$prev_categories" = "${{ steps.build.outputs.category_sha256 }}" ] && \
                 [ "$prev_sources" = "${{ steps.build.outputs.quality_single_unknown_sources }}" ]; then
               echo "unchanged=true" >> "$GITHUB_OUTPUT"
             fi
@@ -194,13 +207,23 @@ jobs:
           - rules=${{ steps.build.outputs.rules }}
           - endpoints=${{ steps.build.outputs.endpoints }}
           - provider_sha256=${{ steps.build.outputs.provider_sha256 }}
-          - archive_sha256=${{ steps.build.outputs.archive_sha256 }}"
-          gh release create "rules-$token" \
-            "$RUNNER_TEMP/out/generation.tar.gz" \
-            "$RUNNER_TEMP/out/latest.json" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Ruleset $token" \
-            --notes "$notes"
+          - archive_sha256=${{ steps.build.outputs.archive_sha256 }}
+          - quality_dropped=${{ steps.build.outputs.quality_dropped }}"
+          if gh release view "rules-$token" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "rules-$token" \
+              "$RUNNER_TEMP/out/generation.tar.gz" \
+              "$RUNNER_TEMP/out/latest.json" \
+              "$RUNNER_TEMP/out/quality-report.json" \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "rules-$token" \
+              "$RUNNER_TEMP/out/generation.tar.gz" \
+              "$RUNNER_TEMP/out/latest.json" \
+              "$RUNNER_TEMP/out/quality-report.json" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Ruleset $token" \
+              --notes "$notes"
+          fi
           keep="${KEEP_RELEASES:-10}"
           case "$keep" in ''|*[!0-9]*) keep=10 ;; esac
           gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' \

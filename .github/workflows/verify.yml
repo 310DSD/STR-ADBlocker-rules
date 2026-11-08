@@ -1,0 +1,23 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rules-toolchain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Run rules toolchain tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Compile Python tooling
+        run: python -m compileall -q tools

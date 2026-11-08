@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import gzip
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -25,10 +26,10 @@ import urllib.request
 from pathlib import Path
 
 try:
-    from .compile_policy import compile_policy, parse_category_rules, parse_families
+    from .compile_policy import CATEGORY_NAMES, compile_policy, parse_category_rules, parse_families
     from .compile_ip_feed import parse_networks, render as render_endpoints
 except ImportError:  # Script execution from tools/ keeps the original CLI.
-    from compile_policy import compile_policy, parse_category_rules, parse_families
+    from compile_policy import CATEGORY_NAMES, compile_policy, parse_category_rules, parse_families
     from compile_ip_feed import parse_networks, render as render_endpoints
 
 SOURCE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -40,6 +41,15 @@ HAGEZI_NORMAL_OLD_GITHUB = "https://raw.githubusercontent.com/hagezi/dns-blockli
 SOURCE_FALLBACKS = {
     HAGEZI_NORMAL_PRIMARY: (HAGEZI_NORMAL_GITLAB,),
     HAGEZI_NORMAL_OLD_GITHUB: (HAGEZI_NORMAL_PRIMARY, HAGEZI_NORMAL_GITLAB),
+    "https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-easylist.txt": (
+        "https://cdn.jsdelivr.net/gh/privacy-protection-tools/anti-AD@master/anti-ad-easylist.txt",
+    ),
+    "https://raw.githubusercontent.com/badmojr/1Hosts/master/Lite/domains.txt": (
+        "https://cdn.jsdelivr.net/gh/badmojr/1Hosts@master/Lite/domains.txt",
+    ),
+    "https://raw.githubusercontent.com/damengzhu/banad/main/jiekouAD.txt": (
+        "https://cdn.jsdelivr.net/gh/damengzhu/banad@main/jiekouAD.txt",
+    ),
 }
 
 DEFAULT_SOURCES = (
@@ -95,6 +105,18 @@ def fetch(url: str, attempts: int = 4, timeout: int = 180) -> bytes:
                 if attempt + 1 < attempts:
                     time.sleep(2 * (attempt + 1))
     raise RuntimeError(f"download failed after {attempts} attempts: {url}: {last_error}")
+
+
+def fetch_sources(sources: list[tuple[str, str]], jobs: int = 4) -> list[tuple[str, bytes]]:
+    """Fetch provider bodies concurrently while preserving source order."""
+    if not sources:
+        return []
+    workers = max(1, min(int(jobs), len(sources)))
+    if workers == 1:
+        return [(name, fetch(url)) for name, url in sources]
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="str-rules-fetch") as pool:
+        bodies = list(pool.map(lambda item: fetch(item[1]), sources))
+    return [(name, body) for (name, _), body in zip(sources, bodies)]
 
 
 def read_manifest(path: Path) -> dict[str, str]:
@@ -198,6 +220,8 @@ def build_cloud_generation(
     normal_domains_limit: int = 100_000,
     single_unknown_sources: tuple[str, ...] = (),
     agent_min: str = "1.2.0",
+    jobs: int = 4,
+    quality_report: Path | None = None,
 ) -> dict[str, object]:
     families = (
         parse_families(sensitive_families.read_text(encoding="utf-8"))
@@ -232,8 +256,7 @@ def build_cloud_generation(
 
     source_paths: list[Path] = []
     source_digests: dict[str, str] = {}
-    for name, url in sources:
-        data = fetch(url)
+    for name, data in fetch_sources(sources, jobs):
         path = source_dir / name
         path.write_bytes(data)
         source_paths.append(path)
@@ -321,6 +344,38 @@ def build_cloud_generation(
         "sources": source_digests,
     }
     (output / "latest.json").write_text(json.dumps(latest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if quality_report:
+        category_counts: dict[str, int] = {}
+        if categories:
+            from collections import Counter
+
+            category_data = (gen / "categories.bin").read_bytes()
+            category_labels = {value: key for key, value in CATEGORY_NAMES.items()}
+            category_counts = {
+                category_labels.get(label, str(label)): count
+                for label, count in Counter(category_data[0::2]).items()
+            }
+        report = {
+            "schema": 1,
+            "token": stamp,
+            "rules": len(policy.domains),
+            "unsupported": policy.unsupported,
+            "quality_dropped": policy.quality_dropped,
+            "quality_filter": manifest.get("quality_filter", ""),
+            "quality_normal_limit": int(manifest.get("quality_normal_limit", "0")),
+            "quality_normal_count": int(manifest.get("quality_normal_count", "0")),
+            "quality_single_unknown_sources": manifest.get("quality_single_unknown_sources", ""),
+            "sources": policy.source_stats,
+            "category_counts": category_counts,
+            "provider_sha256": manifest.get("provider_sha256", ""),
+            "rules_sha256": rules_digest,
+            "archive_sha256": archive_digest,
+        }
+        quality_report.parent.mkdir(parents=True, exist_ok=True)
+        quality_report.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     print(
         f"built token={stamp} rules={latest['rules']} unsupported={latest['unsupported']} "
         f"endpoints={latest['endpoints']} archive={archive_digest}"
@@ -347,6 +402,8 @@ def main() -> int:
     parser.add_argument("--normal-domains-limit", type=int, default=100_000)
     parser.add_argument("--single-unknown-source", action="append", default=[])
     parser.add_argument("--agent-min", default="1.2.0")
+    parser.add_argument("--jobs", type=int, default=4, help="provider downloads in parallel")
+    parser.add_argument("--quality-report", type=Path)
     args = parser.parse_args()
     build_cloud_generation(
         args.work,
@@ -365,6 +422,8 @@ def main() -> int:
         args.normal_domains_limit,
         tuple(args.single_unknown_source),
         args.agent_min,
+        args.jobs,
+        args.quality_report,
     )
     return 0
 

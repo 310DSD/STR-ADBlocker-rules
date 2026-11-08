@@ -14,7 +14,7 @@ import datetime as dt
 import hashlib
 import ipaddress
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
@@ -43,6 +43,8 @@ class ProviderResult:
     unsupported: int
     endpoint_lines: tuple[str, ...]
     quality_dropped: int = 0
+    source_stats: dict[str, dict[str, int]] = field(default_factory=dict)
+    stats: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -269,6 +271,7 @@ def parse_provider(text: str, allowlist: set[str]) -> ProviderResult:
     source_blocks: set[str] = set()
     source_exceptions: set[str] = set()
     unsupported = 0
+    allowlisted = 0
     for raw in text.splitlines():
         parsed = _parse_provider_line(raw)
         unsupported += int(parsed.unsupported)
@@ -276,10 +279,19 @@ def parse_provider(text: str, allowlist: set[str]) -> ProviderResult:
             continue
         if parsed.exception:
             source_exceptions.add(parsed.domain)
-        elif not allowed_domain(parsed.domain, allowlist):
+        elif allowed_domain(parsed.domain, allowlist):
+            allowlisted += 1
+        else:
             source_blocks.add(parsed.domain)
     domains = source_blocks - source_exceptions
-    return ProviderResult(tuple(sorted(domains)), unsupported, ())
+    stats = {
+        "lines": len(text.splitlines()),
+        "blocks": len(source_blocks),
+        "exceptions": len(source_exceptions),
+        "allowlisted": allowlisted,
+        "unsupported": unsupported,
+    }
+    return ProviderResult(tuple(sorted(domains)), unsupported, (), stats=stats)
 
 
 def parse_endpoint(text: str, maximum: int = 65536) -> tuple[str, ...]:
@@ -359,12 +371,15 @@ def compile_policy(
     unsupported = 0
     source_digests: list[tuple[str, str]] = []
     source_domains: list[set[str]] = []
+    source_stats: dict[str, dict[str, int]] = {}
     for source in sources:
         data = source.read_text(encoding="utf-8")
         result = parse_provider(data, allow)
         domains.update(result.domains)
         source_domains.append(set(result.domains))
         unsupported += result.unsupported
+        source_stats[source.name] = dict(result.stats)
+        source_stats[source.name]["domains"] = len(result.domains)
         source_digests.append((source.name, hashlib.sha256(data.encode("utf-8")).hexdigest()))
     counts: dict[str, int] = {}
     domain_sources: dict[str, set[str]] = {}
@@ -491,7 +506,13 @@ def compile_policy(
     lines.append(f"provider_sha256={provider_digest}")
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text("\n".join(lines) + "\n", encoding="ascii", newline="\n")
-    return ProviderResult(tuple(sorted(domains)), unsupported, endpoint_lines, quality_dropped)
+    return ProviderResult(
+        tuple(sorted(domains)),
+        unsupported,
+        endpoint_lines,
+        quality_dropped,
+        source_stats,
+    )
 
 
 def main() -> int:

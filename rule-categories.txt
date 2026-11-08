@@ -175,6 +175,31 @@ tracker isnssdk
 tracker prodregistryv2
 tracker omtrdc
 tracker adobestats
+tracker sgtm
+tracker stape
+tracker ssgtm
+tracker smetrics
+tracker matomo
+tracker piwik
+tracker plausible
+tracker umami
+tracker demdex
+tracker rfihub
+tracker appier
+tracker conviva
+tracker tvsquared
+tracker alphonso
+tracker online-metrix
+tracker emltrk
+tracker mktoresp
+tracker siteimproveanalytics
+tracker webtrekk
+tracker evergage
+tracker googletagmanager
+tracker google-analytics
+telemetry app-measurement
+telemetry forter
+telemetry geocomply
 
 # --- vendor telemetry / crash / attribution SDKs ---
 telemetry bugly

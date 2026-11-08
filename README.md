@@ -12,7 +12,9 @@ provider 收录，敏感厂商家族要求至少 2 个 provider；在此之上�
 这会减少正常站点和低质量长尾误报，同时保留 blocktest 覆盖。
 
 - `generation.tar.gz`：模块 `bin/update.sh cloud` 直接消费的不可变 generation；
-- `latest.json`：token、规则数、provider digest 等元数据，用于变更检测。
+- `latest.json`：token、规则数、provider digest 等元数据，用于变更检测；
+- `quality-report.json`：各 provider 的解析统计、质量过滤和分类计数，随 Release 发布，便于审计；
+- 构建器并行下载 provider（`--jobs`），并保持 source 顺序、digest 和产物确定性。
 
 构建工具链已内置在 `tools/`，工作流不依赖模块仓库在线可达。
 
@@ -49,4 +51,4 @@ digest 与 provider digest 后才原子发布，失败时保留旧 generation。
 
 ## Default allowlist
 
-`default-allowlist.txt` is the canonical default allowlist for cloud builds and is identical to the module's bundled copy. The build passes it via `--allowlist`, so compilers drop allowed domains from the rules and hotset while keeping parent suffix rules; the module daemon applies the same list at runtime.
+`default-allowlist.txt` is the canonical default allowlist for cloud builds and is identical to the module's bundled copy. The build passes it via `--allowlist`, so compilers drop allowed domains from rules and categories while keeping parent suffix rules; the module daemon applies the same list at runtime.
